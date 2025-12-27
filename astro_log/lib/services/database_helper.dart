@@ -21,7 +21,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -132,6 +132,56 @@ class DatabaseHelper {
         )
       ''');
     }
+    
+    if (oldVersion < 5) {
+      // Create gallery albums table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS gallery_albums (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          createdAt TEXT NOT NULL
+        )
+      ''');
+      
+      // Migrate existing gallery_images to use albumId
+      // First, create a default album
+      await db.insert('gallery_albums', {
+        'name': 'My Gallery',
+        'createdAt': DateTime.now().toIso8601String(),
+      });
+      
+      // Check if telescope column exists and migrate
+      try {
+        final existingImages = await db.query('gallery_images');
+        if (existingImages.isNotEmpty) {
+          // Drop old table and recreate
+          await db.execute('DROP TABLE IF EXISTS gallery_images_old');
+          await db.execute('ALTER TABLE gallery_images RENAME TO gallery_images_old');
+          
+          await db.execute('''
+            CREATE TABLE gallery_images (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              albumId INTEGER NOT NULL,
+              imagePath TEXT NOT NULL,
+              title TEXT,
+              description TEXT,
+              createdAt TEXT NOT NULL,
+              FOREIGN KEY (albumId) REFERENCES gallery_albums (id) ON DELETE CASCADE
+            )
+          ''');
+          
+          // Copy data to new table with default albumId = 1
+          await db.execute('''
+            INSERT INTO gallery_images (albumId, imagePath, title, description, createdAt)
+            SELECT 1, imagePath, title, description, createdAt FROM gallery_images_old
+          ''');
+          
+          await db.execute('DROP TABLE gallery_images_old');
+        }
+      } catch (e) {
+        // Table doesn't exist yet or error migrating, skip
+      }
+    }
   }
 
   Future<void> _createDB(Database db, int version) async {
@@ -239,15 +289,25 @@ class DatabaseHelper {
       )
     ''');
 
+    // Gallery Albums table
+    await db.execute('''
+      CREATE TABLE gallery_albums (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        createdAt TEXT NOT NULL
+      )
+    ''');
+
     // Gallery Images table
     await db.execute('''
       CREATE TABLE gallery_images (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        telescope TEXT NOT NULL,
+        albumId INTEGER NOT NULL,
         imagePath TEXT NOT NULL,
         title TEXT,
         description TEXT,
-        createdAt TEXT NOT NULL
+        createdAt TEXT NOT NULL,
+        FOREIGN KEY (albumId) REFERENCES gallery_albums (id) ON DELETE CASCADE
       )
     ''');
   }
@@ -575,5 +635,37 @@ class DatabaseHelper {
       return await db.query('celestial_objects', orderBy: 'createdAt DESC');
     }
     return await db.query('celestial_objects', where: where, whereArgs: whereArgs, orderBy: 'createdAt DESC');
+  }
+
+  // Gallery Albums CRUD
+  Future<int> insertGalleryAlbum(Map<String, dynamic> album) async {
+    final db = await database;
+    return await db.insert('gallery_albums', album);
+  }
+
+  Future<List<Map<String, dynamic>>> getGalleryAlbums() async {
+    final db = await database;
+    return await db.query('gallery_albums', orderBy: 'createdAt DESC');
+  }
+
+  Future<int> updateGalleryAlbum(int id, Map<String, dynamic> album) async {
+    final db = await database;
+    return await db.update('gallery_albums', album, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> deleteGalleryAlbum(int id) async {
+    final db = await database;
+    return await db.delete('gallery_albums', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // Gallery Images by Album
+  Future<List<Map<String, dynamic>>> getGalleryImagesByAlbum(int albumId) async {
+    final db = await database;
+    return await db.query(
+      'gallery_images',
+      where: 'albumId = ?',
+      whereArgs: [albumId],
+      orderBy: 'createdAt DESC',
+    );
   }
 }

@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'themes/app_theme.dart';
 import 'screens/home_dashboard_screen.dart';
-import 'screens/books_screen.dart';
-import 'screens/projects_screen.dart';
-import 'screens/research_papers_screen.dart';
+import 'screens/ai_assistant_screen.dart';
+import 'screens/academics_screen.dart';
 import 'screens/space_screen.dart';
 
 void main() {
@@ -36,9 +35,8 @@ class _MainScreenState extends State<MainScreen> {
 
   final List<Widget> _screens = const [
     HomeDashboardScreen(),
-    ProjectsScreen(),
-    BooksScreen(),
-    ResearchPapersScreen(),
+    AIAssistantScreen(),
+    AcademicsScreen(),
     SpaceScreen(),
   ];
 
@@ -53,26 +51,25 @@ class _MainScreenState extends State<MainScreen> {
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
         type: BottomNavigationBarType.fixed,
+        backgroundColor: const Color(0xFF1A1A2E),
+        selectedItemColor: Colors.purpleAccent,
+        unselectedItemColor: Colors.white54,
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.home),
             label: 'Home',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.assignment),
-            label: 'Projects',
+            icon: Icon(Icons.psychology),
+            label: 'AI Assistant',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.menu_book),
-            label: 'Books',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.article),
-            label: 'Research',
+            icon: Icon(Icons.school),
+            label: 'Academics',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.rocket_launch),
-            label: 'Space',
+            label: 'Astronomy',
           ),
         ],
       ),
