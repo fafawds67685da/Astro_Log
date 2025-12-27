@@ -1,91 +1,47 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // Color palette
-  static const Color deepNavy = Color(0xFF0A0E27);
-  static const Color spacePurple = Color(0xFF1A1A3E);
-  static const Color accentBlue = Color(0xFF4A6FE3);
-  static const Color starWhite = Color(0xFFF0F0F5);
-  static const Color cosmicPurple = Color(0xFF7B2CBF);
+  static const Color deepSpace = Color(0xFF0B1120);
+  static const Color nebulaPurple = Color(0xFF6B4FBB);
+  static const Color starBlue = Color(0xFF4A90E2);
+  static const Color cosmicPink = Color(0xFFE91E63);
+  static const Color starWhite = Color(0xFFF5F5F5);
+  static const Color darkSurface = Color(0xFF1A1F2E);
 
-  // Text styles
-  static const TextStyle heading1 = TextStyle(
-    fontSize: 32,
-    fontWeight: FontWeight.bold,
-    color: starWhite,
-    letterSpacing: 0.5,
-  );
-
-  static const TextStyle heading2 = TextStyle(
-    fontSize: 24,
-    fontWeight: FontWeight.w600,
-    color: starWhite,
-    letterSpacing: 0.3,
-  );
-
-  static const TextStyle heading3 = TextStyle(
-    fontSize: 20,
-    fontWeight: FontWeight.w600,
-    color: starWhite,
-  );
-
-  static const TextStyle bodyText = TextStyle(
-    fontSize: 16,
-    fontWeight: FontWeight.normal,
-    color: starWhite,
-    height: 1.5,
-  );
-
-  static const TextStyle bodyTextSecondary = TextStyle(
-    fontSize: 14,
-    fontWeight: FontWeight.normal,
-    color: Color(0xFFB0B0C0),
-    height: 1.4,
-  );
-
-  static const TextStyle caption = TextStyle(
-    fontSize: 12,
-    fontWeight: FontWeight.normal,
-    color: Color(0xFF808090),
-  );
-
-  // Theme data
   static ThemeData get darkTheme {
     return ThemeData(
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: deepNavy,
-      primaryColor: accentBlue,
+      scaffoldBackgroundColor: deepSpace,
+      primaryColor: starBlue,
       colorScheme: const ColorScheme.dark(
-        primary: accentBlue,
-        secondary: cosmicPurple,
-        surface: spacePurple,
+        primary: starBlue,
+        secondary: nebulaPurple,
+        surface: darkSurface,
+        background: deepSpace,
         onPrimary: starWhite,
         onSecondary: starWhite,
         onSurface: starWhite,
+        onBackground: starWhite,
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: spacePurple,
+        backgroundColor: darkSurface,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: heading2,
+        titleTextStyle: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          color: starWhite,
+        ),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: spacePurple,
-        selectedItemColor: accentBlue,
-        unselectedItemColor: Color(0xFF808090),
+        backgroundColor: darkSurface,
+        selectedItemColor: starBlue,
+        unselectedItemColor: Colors.grey,
         type: BottomNavigationBarType.fixed,
         elevation: 8,
       ),
-      textTheme: const TextTheme(
-        displayLarge: heading1,
-        displayMedium: heading2,
-        displaySmall: heading3,
-        bodyLarge: bodyText,
-        bodyMedium: bodyTextSecondary,
-        bodySmall: caption,
-      ),
       cardTheme: CardThemeData(
-        color: spacePurple,
+        color: darkSurface,
         elevation: 4,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
@@ -93,7 +49,7 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: accentBlue,
+          backgroundColor: starBlue,
           foregroundColor: starWhite,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           shape: RoundedRectangleBorder(

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'screens/home_dashboard.dart';
-import 'screens/explore_screen.dart';
-import 'screens/track_screen.dart';
-import 'screens/events_screen.dart';
-import 'screens/profile_screen.dart';
 import 'themes/app_theme.dart';
+import 'screens/home_dashboard_screen.dart';
+import 'screens/books_screen.dart';
+import 'screens/observatories_screen.dart';
+import 'screens/constellations_screen.dart';
+import 'screens/celestial_objects_screen.dart';
+import 'screens/gallery_screen.dart';
 
 void main() {
   runApp(const AstroLogApp());
@@ -19,64 +20,29 @@ class AstroLogApp extends StatelessWidget {
       title: 'AstroLog',
       theme: AppTheme.darkTheme,
       debugShowCheckedModeBanner: false,
-      home: const MainNavigationScreen(),
-      routes: {
-        '/home': (context) => const HomeDashboard(),
-        '/explore': (context) => const ExploreScreen(),
-        '/track': (context) => const TrackScreen(),
-        '/events': (context) => const EventsScreen(),
-        '/profile': (context) => const ProfileScreen(),
-      },
+      home: const MainScreen(),
     );
   }
 }
 
-class MainNavigationScreen extends StatefulWidget {
-  const MainNavigationScreen({Key? key}) : super(key: key);
+class MainScreen extends StatefulWidget {
+  const MainScreen({Key? key}) : super(key: key);
 
   @override
-  State<MainNavigationScreen> createState() => _MainNavigationScreenState();
+  State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainNavigationScreenState extends State<MainNavigationScreen> {
+class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
-  final List<Widget> _screens = [
-    const HomeDashboard(),
-    const ExploreScreen(),
-    const TrackScreen(),
-    const EventsScreen(),
-    const ProfileScreen(),
+  final List<Widget> _screens = const [
+    HomeDashboardScreen(),
+    BooksScreen(),
+    ObservatoriesScreen(),
+    ConstellationsScreen(),
+    CelestialObjectsScreen(),
+    GalleryScreen(),
   ];
-
-  final List<BottomNavigationBarItem> _navItems = const [
-    BottomNavigationBarItem(
-      icon: Icon(Icons.home),
-      label: 'Home',
-    ),
-    BottomNavigationBarItem(
-      icon: Icon(Icons.explore),
-      label: 'Explore',
-    ),
-    BottomNavigationBarItem(
-      icon: Icon(Icons.track_changes),
-      label: 'Track',
-    ),
-    BottomNavigationBarItem(
-      icon: Icon(Icons.event),
-      label: 'Events',
-    ),
-    BottomNavigationBarItem(
-      icon: Icon(Icons.person),
-      label: 'Profile',
-    ),
-  ];
-
-  void _onItemTapped(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -87,10 +53,33 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: _onItemTapped,
-        items: _navItems,
-        selectedFontSize: 12,
-        unselectedFontSize: 12,
+        onTap: (index) => setState(() => _currentIndex = index),
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.menu_book),
+            label: 'Books',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.location_city),
+            label: 'Observatories',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.stars),
+            label: 'Constellations',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.public),
+            label: 'Objects',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.photo_library),
+            label: 'Gallery',
+          ),
+        ],
       ),
     );
   }

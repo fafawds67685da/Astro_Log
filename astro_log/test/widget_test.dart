@@ -11,18 +11,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:astro_log/main.dart';
 
 void main() {
-  testWidgets('AstroLog app smoke test', (WidgetTester tester) async {
+  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const AstroLogApp());
+    await tester.pumpWidget(const MyApp());
 
-    // Verify that the app starts with Home screen.
-    expect(find.text('Home'), findsWidgets);
-    expect(find.text('Welcome to AstroLog'), findsOneWidget);
+    // Verify that our counter starts at 0.
+    expect(find.text('0'), findsOneWidget);
+    expect(find.text('1'), findsNothing);
 
-    // Verify bottom navigation items are present.
-    expect(find.text('Explore'), findsOneWidget);
-    expect(find.text('Track'), findsOneWidget);
-    expect(find.text('Events'), findsOneWidget);
-    expect(find.text('Profile'), findsOneWidget);
+    // Tap the '+' icon and trigger a frame.
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pump();
+
+    // Verify that our counter has incremented.
+    expect(find.text('0'), findsNothing);
+    expect(find.text('1'), findsOneWidget);
   });
 }
