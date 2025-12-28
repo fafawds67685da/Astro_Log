@@ -733,6 +733,16 @@ class _BooksScreenState extends State<BooksScreen> {
           color: Color(0xFF16213E),
           itemBuilder: (context) => [
             PopupMenuItem(
+              value: 'view',
+              child: Row(
+                children: [
+                  Icon(Icons.visibility, color: Colors.blueAccent),
+                  SizedBox(width: 8),
+                  Text('View', style: TextStyle(color: Colors.white)),
+                ],
+              ),
+            ),
+            PopupMenuItem(
               value: 'download',
               child: Row(
                 children: [
@@ -765,6 +775,14 @@ class _BooksScreenState extends State<BooksScreen> {
           ],
           onSelected: (value) async {
             switch (value) {
+              case 'view':
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => BookDetailScreen(book: book),
+                  ),
+                );
+                break;
               case 'download':
                 await _downloadBookImage(book);
                 break;
@@ -1548,5 +1566,400 @@ class _AddEditBookScreenState extends State<AddEditBookScreen> {
     _totalPagesController.dispose();
     _currentPageController.dispose();
     super.dispose();
+  }
+}
+
+// ==================== BOOK DETAIL SCREEN ====================
+
+class BookDetailScreen extends StatefulWidget {
+  final Map<String, dynamic> book;
+
+  const BookDetailScreen({Key? key, required this.book}) : super(key: key);
+
+  @override
+  State<BookDetailScreen> createState() => _BookDetailScreenState();
+}
+
+class _BookDetailScreenState extends State<BookDetailScreen> {
+  final DatabaseHelper _db = DatabaseHelper.instance;
+  List<Map<String, dynamic>> _genres = [];
+  Map<String, dynamic>? _series;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBookDetails();
+  }
+
+  Future<void> _loadBookDetails() async {
+    final genres = await _db.getBookGenres(widget.book['id']);
+    Map<String, dynamic>? series;
+    if (widget.book['seriesId'] != null) {
+      final allSeries = await _db.getBookSeries();
+      series = allSeries.firstWhere(
+        (s) => s['id'] == widget.book['seriesId'],
+        orElse: () => {},
+      );
+    }
+    setState(() {
+      _genres = genres;
+      _series = series;
+      _isLoading = false;
+    });
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'read': return Colors.greenAccent;
+      case 'reading': return Colors.orangeAccent;
+      default: return Colors.grey;
+    }
+  }
+
+  String _getStatusText(String status) {
+    switch (status) {
+      case 'read': return 'Read';
+      case 'reading': return 'Reading';
+      default: return 'Not Read';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final status = widget.book['readingStatus'] ?? 'not_read';
+    final statusColor = _getStatusColor(status);
+    final currentPage = widget.book['currentPage'] ?? 0;
+    final totalPages = widget.book['totalPages'] ?? 1;
+    final progress = (currentPage / totalPages * 100).toStringAsFixed(0);
+
+    return Scaffold(
+      backgroundColor: Color(0xFF0A0E27),
+      appBar: AppBar(
+        title: Text('Book Details'),
+        backgroundColor: Color(0xFF16213E),
+        elevation: 0,
+      ),
+      body: _isLoading
+          ? Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Book Image Section
+                  Container(
+                    width: double.infinity,
+                    height: 500,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Color(0xFF16213E),
+                          Color(0xFF0A0E27),
+                        ],
+                      ),
+                    ),
+                    child: Center(
+                      child: Hero(
+                        tag: 'book_${widget.book['id']}',
+                        child: Container(
+                          margin: EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: statusColor.withOpacity(0.3),
+                                blurRadius: 30,
+                                spreadRadius: 5,
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: widget.book['imagePath'] != null
+                                ? Image.file(
+                                    File(widget.book['imagePath']),
+                                    fit: BoxFit.contain,
+                                  )
+                                : Container(
+                                    width: 300,
+                                    height: 450,
+                                    color: Colors.grey[800],
+                                    child: Icon(Icons.book, size: 100, color: Colors.white54),
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Book Details Section
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Title
+                        Text(
+                          widget.book['title'] ?? 'Untitled',
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(height: 8),
+
+                        // Author
+                        Text(
+                          'by ${widget.book['author'] ?? 'Unknown'}',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.white70,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                        SizedBox(height: 24),
+
+                        // Status Badge
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: statusColor, width: 2),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.circle, size: 12, color: statusColor),
+                              SizedBox(width: 8),
+                              Text(
+                                _getStatusText(status),
+                                style: TextStyle(
+                                  color: statusColor,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        SizedBox(height: 24),
+
+                        // Reading Progress
+                        if (totalPages > 0) ...[
+                          Container(
+                            padding: EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Color(0xFF1A1F3A),
+                                  Color(0xFF16213E),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: statusColor.withOpacity(0.3),
+                                width: 1,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Reading Progress',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Text(
+                                      '$progress%',
+                                      style: TextStyle(
+                                        color: statusColor,
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: 12),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: LinearProgressIndicator(
+                                    value: currentPage / totalPages,
+                                    backgroundColor: Colors.white.withOpacity(0.1),
+                                    valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                                    minHeight: 10,
+                                  ),
+                                ),
+                                SizedBox(height: 8),
+                                Text(
+                                  'Page $currentPage of $totalPages',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          SizedBox(height: 24),
+                        ],
+
+                        // Series Information
+                        if (_series != null && _series!.isNotEmpty) ...[
+                          _buildInfoCard(
+                            'Series',
+                            _series!['name'] ?? '',
+                            Icons.collections_bookmark,
+                            Colors.purpleAccent,
+                            subtitle: widget.book['seriesNumber'] != null 
+                                ? 'Book #${widget.book['seriesNumber']}'
+                                : null,
+                          ),
+                          SizedBox(height: 16),
+                        ],
+
+                        // Genres
+                        if (_genres.isNotEmpty) ...[
+                          Text(
+                            'Genres',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(height: 12),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: _genres.map((genre) => 
+                              Container(
+                                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.purpleAccent.withOpacity(0.3),
+                                      Colors.cyanAccent.withOpacity(0.2),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: Colors.purpleAccent.withOpacity(0.5),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Text(
+                                  genre['name'],
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ).toList(),
+                          ),
+                          SizedBox(height: 24),
+                        ],
+
+                        // Additional Info
+                        _buildInfoCard(
+                          'Added',
+                          _formatDate(widget.book['createdAt']),
+                          Icons.calendar_today,
+                          Colors.cyanAccent,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+
+  Widget _buildInfoCard(String label, String value, IconData icon, Color color, {String? subtitle}) {
+    return Container(
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Color(0xFF1A1F3A),
+            Color(0xFF16213E),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: color.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 24),
+          ),
+          SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  value,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (subtitle != null) ...[
+                  SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(String? dateStr) {
+    if (dateStr == null) return 'Unknown';
+    try {
+      final date = DateTime.parse(dateStr);
+      return '${date.day}/${date.month}/${date.year}';
+    } catch (e) {
+      return 'Unknown';
+    }
   }
 }
