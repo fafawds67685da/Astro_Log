@@ -234,7 +234,7 @@ class _BooksScreenState extends State<BooksScreen> {
           itemCount: snapshot.data!.length,
           itemBuilder: (context, index) {
             final book = snapshot.data![index];
-            return _buildBookCard(book);
+            return _buildBookCard(book, cardIndex: index + 1);
           },
         );
       },
@@ -476,7 +476,9 @@ class _BooksScreenState extends State<BooksScreen> {
           ),
           backgroundColor: Color(0xFF1A1A2E),
           collapsedBackgroundColor: Color(0xFF1A1A2E),
-          children: snapshot.data?.map((book) => _buildBookCard(book)).toList() ?? [],
+          children: snapshot.data?.asMap().entries.map((entry) => 
+            _buildBookCard(entry.value, cardIndex: entry.key + 1)
+          ).toList() ?? [],
         );
       },
     );
@@ -503,7 +505,9 @@ class _BooksScreenState extends State<BooksScreen> {
           ),
           backgroundColor: Color(0xFF1A1A2E),
           collapsedBackgroundColor: Color(0xFF1A1A2E),
-          children: snapshot.data?.map((book) => _buildBookCard(book, showSeriesNumber: true)).toList() ?? [],
+          children: snapshot.data?.asMap().entries.map((entry) => 
+            _buildBookCard(entry.value, showSeriesNumber: true, cardIndex: entry.key + 1)
+          ).toList() ?? [],
         );
       },
     );
@@ -528,13 +532,15 @@ class _BooksScreenState extends State<BooksScreen> {
           ),
           backgroundColor: Color(0xFF1A1A2E),
           collapsedBackgroundColor: Color(0xFF1A1A2E),
-          children: snapshot.data?.map((book) => _buildBookCard(book)).toList() ?? [],
+          children: snapshot.data?.asMap().entries.map((entry) => 
+            _buildBookCard(entry.value, cardIndex: entry.key + 1)
+          ).toList() ?? [],
         );
       },
     );
   }
   
-  Widget _buildBookCard(Map<String, dynamic> book, {bool showSeriesNumber = false}) {
+  Widget _buildBookCard(Map<String, dynamic> book, {bool showSeriesNumber = false, int? cardIndex}) {
     final readingStatus = book['readingStatus'] ?? 'not_read';
     IconData statusIcon;
     Color statusColor;
@@ -553,25 +559,80 @@ class _BooksScreenState extends State<BooksScreen> {
         statusColor = Colors.blueAccent;
     }
     
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      color: Color(0xFF1A1A2E),
-      child: ListTile(
-        leading: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.file(
-            File(book['imagePath']),
-            width: 50,
-            height: 70,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) => Container(
-              width: 50,
-              height: 70,
-              color: Colors.grey,
-              child: Icon(Icons.book, color: Colors.white),
-            ),
-          ),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Color(0xFF2A2A3E).withOpacity(0.8),
+            Color(0xFF1A1A2E).withOpacity(0.9),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: statusColor.withOpacity(0.4),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: statusColor.withOpacity(0.2),
+            blurRadius: 8,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: ListTile(
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            leading: Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.file(
+                    File(book['imagePath']),
+                    width: 50,
+                    height: 70,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      width: 50,
+                      height: 70,
+                      color: Colors.grey,
+                      child: Icon(Icons.book, color: Colors.white),
+                    ),
+                  ),
+                ),
+                if (cardIndex != null)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Color(0xFF9D50BB), Color(0xFF6E48AA)],
+                        ),
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(8),
+                          bottomRight: Radius.circular(8),
+                        ),
+                      ),
+                      child: Text(
+                        '#$cardIndex',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
         title: Row(
           children: [
             if (showSeriesNumber && book['seriesNumber'] != null)
@@ -605,6 +666,44 @@ class _BooksScreenState extends State<BooksScreen> {
                 style: TextStyle(color: Colors.white70),
               ),
             SizedBox(height: 4),
+            // Progress bar and page info
+            if (book['totalPages'] != null && book['totalPages'] > 0) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Page ${book['currentPage'] ?? 0} of ${book['totalPages']}',
+                              style: TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.w500),
+                            ),
+                            Text(
+                              '${((book['currentPage'] ?? 0) / book['totalPages'] * 100).toStringAsFixed(0)}%',
+                              style: TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 4),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: (book['currentPage'] ?? 0) / book['totalPages'],
+                            backgroundColor: Colors.white.withOpacity(0.1),
+                            valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                            minHeight: 6,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 8),
+            ],
             FutureBuilder<List<Map<String, dynamic>>>(
               future: _db.getBookGenres(book['id']),
               builder: (context, genreSnapshot) {
@@ -677,6 +776,8 @@ class _BooksScreenState extends State<BooksScreen> {
                 break;
             }
           },
+        ),
+          ),
         ),
       ),
     );

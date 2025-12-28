@@ -188,7 +188,7 @@ class _CategoryBooksScreenState extends State<CategoryBooksScreen> {
             itemCount: snapshot.data!.length,
             itemBuilder: (context, index) {
               final book = snapshot.data![index];
-              return _buildBookCard(book, categoryColor);
+              return _buildBookCard(book, categoryColor, cardIndex: index + 1);
             },
           );
         },
@@ -196,7 +196,7 @@ class _CategoryBooksScreenState extends State<CategoryBooksScreen> {
     );
   }
 
-  Widget _buildBookCard(Map<String, dynamic> book, Color accentColor) {
+  Widget _buildBookCard(Map<String, dynamic> book, Color accentColor, {int? cardIndex}) {
     final hasImage = book['imagePath'] != null && book['imagePath'].toString().isNotEmpty;
     final imagePath = book['imagePath'];
     final readingStatus = book['readingStatus'] ?? 'not_read';
@@ -223,18 +223,33 @@ class _CategoryBooksScreenState extends State<CategoryBooksScreen> {
       child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [accentColor.withOpacity(0.2), accentColor.withOpacity(0.05)],
+            colors: [
+              Color(0xFF2A2A3E).withOpacity(0.9),
+              Color(0xFF1A1A2E).withOpacity(0.95),
+            ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: accentColor.withOpacity(0.3), width: 1),
+          border: Border.all(
+            color: statusColor.withOpacity(0.6),
+            width: 2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: statusColor.withOpacity(0.3),
+              blurRadius: 12,
+              offset: Offset(0, 6),
+            ),
+          ],
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
               Expanded(
                 flex: 3,
                 child: Stack(
@@ -292,6 +307,36 @@ class _CategoryBooksScreenState extends State<CategoryBooksScreen> {
                           ),
                         ),
                       ),
+                    // Card index badge
+                    if (cardIndex != null)
+                      Positioned(
+                        bottom: 8,
+                        left: 8,
+                        child: Container(
+                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Color(0xFF9D50BB), Color(0xFF6E48AA)],
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.3),
+                                blurRadius: 4,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Text(
+                            '#$cardIndex',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -323,22 +368,42 @@ class _CategoryBooksScreenState extends State<CategoryBooksScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       Spacer(),
-                      if (book['totalPages'] != null && book['totalPages'] > 0)
-                        Row(
+                      if (book['totalPages'] != null && book['totalPages'] > 0) ...[
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(Icons.menu_book, size: 12, color: accentColor),
-                            SizedBox(width: 4),
-                            Text(
-                              '${book['currentPage'] ?? 0}/${book['totalPages']} pages',
-                              style: TextStyle(color: accentColor, fontSize: 10),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Page ${book['currentPage'] ?? 0} / ${book['totalPages']}',
+                                  style: TextStyle(color: accentColor, fontSize: 10, fontWeight: FontWeight.w500),
+                                ),
+                                Text(
+                                  '${((book['currentPage'] ?? 0) / book['totalPages'] * 100).toStringAsFixed(0)}%',
+                                  style: TextStyle(color: accentColor, fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 4),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(3),
+                              child: LinearProgressIndicator(
+                                value: (book['currentPage'] ?? 0) / book['totalPages'],
+                                backgroundColor: Colors.white.withOpacity(0.1),
+                                valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                                minHeight: 4,
+                              ),
                             ),
                           ],
                         ),
+                      ],
                     ],
                   ),
                 ),
               ),
             ],
+          ),
           ),
         ),
       ),
