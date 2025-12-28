@@ -5,7 +5,9 @@ import 'dart:io';
 import 'dart:ui';
 import '../services/database_helper.dart';
 import '../services/image_service.dart';
+import '../models/enums.dart';
 import 'genre_series_manager_screen.dart';
+import 'category_books_screen.dart';
 
 class BooksScreen extends StatefulWidget {
   const BooksScreen({Key? key}) : super(key: key);
@@ -13,9 +15,6 @@ class BooksScreen extends StatefulWidget {
   @override
   State<BooksScreen> createState() => _BooksScreenState();
 }
-
-enum ViewMode { all, genres, series }
-enum ReadingStatus { all, read, reading, notRead }
 
 class _BooksScreenState extends State<BooksScreen> {
   final DatabaseHelper _db = DatabaseHelper.instance;
@@ -106,6 +105,16 @@ class _BooksScreenState extends State<BooksScreen> {
             selectedTileColor: Colors.purpleAccent.withOpacity(0.1),
             onTap: () {
               setState(() => _viewMode = ViewMode.series);
+              Navigator.pop(context);
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.person, color: _viewMode == ViewMode.authors ? Colors.purpleAccent : Colors.white70),
+            title: Text('By Authors', style: TextStyle(color: Colors.white)),
+            selected: _viewMode == ViewMode.authors,
+            selectedTileColor: Colors.purpleAccent.withOpacity(0.1),
+            onTap: () {
+              setState(() => _viewMode = ViewMode.authors);
               Navigator.pop(context);
             },
           ),
@@ -203,6 +212,8 @@ class _BooksScreenState extends State<BooksScreen> {
         return _buildGenresView();
       case ViewMode.series:
         return _buildSeriesView();
+      case ViewMode.authors:
+        return _buildAuthorsView();
     }
   }
   
@@ -238,12 +249,26 @@ class _BooksScreenState extends State<BooksScreen> {
           return _buildEmptyState('No genres', 'Create genres in settings');
         }
         
-        return ListView.builder(
+        return GridView.builder(
           padding: const EdgeInsets.all(16),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            childAspectRatio: 0.85,
+          ),
           itemCount: snapshot.data!.length,
           itemBuilder: (context, index) {
             final genre = snapshot.data![index];
-            return _buildGenreFolder(genre);
+            final genreName = genre['name'] as String? ?? 'Unnamed Genre';
+            final genreId = genre['id'] as int?;
+            return _buildCategoryCard(
+              name: genreName,
+              icon: Icons.folder,
+              color: Colors.purpleAccent,
+              onTap: () => _navigateToCategoryBooks('genre', genreId, genreName),
+              genreId: genreId,
+            );
           },
         );
       },
@@ -258,19 +283,176 @@ class _BooksScreenState extends State<BooksScreen> {
           return _buildEmptyState('No series', 'Create book series in settings');
         }
         
-        return ListView.builder(
+        final allItems = [...snapshot.data!, {'id': null, 'name': 'Standalone Books', 'isStandalone': true}];
+        
+        return GridView.builder(
           padding: const EdgeInsets.all(16),
-          itemCount: snapshot.data!.length + 1, // +1 for standalone books
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            childAspectRatio: 0.85,
+          ),
+          itemCount: allItems.length,
           itemBuilder: (context, index) {
-            if (index == snapshot.data!.length) {
-              return _buildStandaloneBooksFolder();
-            }
-            final series = snapshot.data![index];
-            return _buildSeriesFolder(series);
+            final series = allItems[index];
+            final isStandalone = series['isStandalone'] == true;
+            final seriesName = series['name'] as String? ?? 'Unnamed Series';
+            final seriesId = series['id'] as int?;
+            return _buildCategoryCard(
+              name: seriesName,
+              icon: isStandalone ? Icons.book : Icons.collections_bookmark,
+              color: isStandalone ? Colors.orangeAccent : Colors.cyanAccent,
+              onTap: () => _navigateToCategoryBooks(
+                isStandalone ? 'standalone' : 'series',
+                seriesId,
+                seriesName,
+              ),
+              seriesId: isStandalone ? null : seriesId,
+            );
           },
         );
       },
     );
+  }
+  
+  Widget _buildAuthorsView() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _getFilteredBooks(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return _buildEmptyState('No books', 'Add books to see authors');
+        }
+        
+        // Group books by author
+        Map<String, List<Map<String, dynamic>>> booksByAuthor = {};
+        for (var book in snapshot.data!) {
+          String author = book['author'] ?? 'Unknown';
+          if (!booksByAuthor.containsKey(author)) {
+            booksByAuthor[author] = [];
+          }
+          booksByAuthor[author]!.add(book);
+        }
+        
+        final authors = booksByAuthor.keys.toList()..sort();
+        
+        return GridView.builder(
+          padding: const EdgeInsets.all(16),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            childAspectRatio: 0.85,
+          ),
+          itemCount: authors.length,
+          itemBuilder: (context, index) {
+            final author = authors[index];
+            return _buildCategoryCard(
+              name: author,
+              icon: Icons.person,
+              color: Colors.tealAccent,
+              onTap: () => _navigateToCategoryBooks('author', null, author),
+              bookCount: booksByAuthor[author]!.length,
+            );
+          },
+        );
+      },
+    );
+  }
+  
+  Widget _buildCategoryCard({
+    required String name,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+    int? genreId,
+    int? seriesId,
+    int? bookCount,
+  }) {
+    return FutureBuilder<int>(
+      future: bookCount != null 
+          ? Future.value(bookCount)
+          : genreId != null
+              ? _getBooksByGenreFiltered(genreId).then((books) => books.length)
+              : seriesId != null
+                  ? _getBooksBySeriesFiltered(seriesId).then((books) => books.length)
+                  : _getStandaloneBooks().then((books) => books.length),
+      builder: (context, snapshot) {
+        final count = snapshot.data ?? 0;
+        
+        return GestureDetector(
+          onTap: onTap,
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [color.withOpacity(0.3), color.withOpacity(0.1)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: color.withOpacity(0.5), width: 1),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(icon, size: 48, color: color),
+                      SizedBox(height: 12),
+                      Text(
+                        name,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      SizedBox(height: 8),
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: color.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '$count ${count == 1 ? 'book' : 'books'}',
+                          style: TextStyle(
+                            color: color,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+  
+  void _navigateToCategoryBooks(String type, int? id, String name) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CategoryBooksScreen(
+          categoryType: type,
+          categoryId: id,
+          categoryName: name,
+          statusFilters: _statusFilters,
+        ),
+      ),
+    ).then((_) => setState(() {}));
   }
   
   Widget _buildGenreFolder(Map<String, dynamic> genre) {

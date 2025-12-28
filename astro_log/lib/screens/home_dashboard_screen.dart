@@ -342,7 +342,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with TickerPr
                                           Expanded(
                                             child: _StatsBox(
                                               label: 'Pages Read',
-                                              value: '${_readingStats['pagesRead']}',
+                                              value: '${_readingStats['totalPagesCompleted']}',
+                                              subtitle: 'of ${_readingStats['totalPages']}',
                                               color: Colors.green,
                                             ),
                                           ),
@@ -350,8 +351,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with TickerPr
                                           Expanded(
                                             child: _StatsBox(
                                               label: 'Currently Reading',
-                                              value: '${_readingStats['currentlyReadingPages']}',
-                                              subtitle: 'of ${_readingStats['currentlyReadingTotalPages']}',
+                                              value: '${_readingStats['booksReading']}',
+                                              subtitle: '${_readingStats['booksReading'] == 1 ? 'book' : 'books'}',
                                               color: Colors.blue,
                                             ),
                                           ),
@@ -372,8 +373,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with TickerPr
                                           Expanded(
                                             child: _StatsBox(
                                               label: 'Read Rate',
-                                              value: '${_readingStats['readPercentage'].toStringAsFixed(0)}%',
-                                              subtitle: 'of collection',
+                                              value: '${_readingStats['overallProgress'].toStringAsFixed(1)}%',
+                                              subtitle: 'of all pages',
                                               color: Colors.purple,
                                             ),
                                           ),
@@ -394,19 +395,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with TickerPr
                         sliver: SliverList(
                           delegate: SliverChildListDelegate([
                             const SizedBox(height: 24),
-                            CosmicStatCard(
-                              title: 'Book Library',
-                              icon: Icons.menu_book,
-                              completed: _stats['booksRead'] ?? 0,
-                              total: _stats['booksTotal'] ?? 0,
-                              completedLabel: 'Read',
-                              pendingLabel: 'To Read',
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF9D50BB), Color(0xFF6E48AA)],
-                              ),
-                              pulseAnimation: _pulseController,
-                            ),
-                            const SizedBox(height: 16),
+                            // Book Library card removed - stats shown in Reading Statistics section above
                             
                             CosmicStatCard(
                               title: 'Celestial Objects',
