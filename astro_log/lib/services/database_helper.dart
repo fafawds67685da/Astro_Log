@@ -21,7 +21,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 7,
+      version: 8,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -237,6 +237,32 @@ class DatabaseHelper {
       // Add page tracking columns
       await db.execute('ALTER TABLE books ADD COLUMN totalPages INTEGER DEFAULT 0');
       await db.execute('ALTER TABLE books ADD COLUMN currentPage INTEGER DEFAULT 0');
+    }
+
+    if (oldVersion < 8) {
+      // Create authors table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS authors (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          createdAt TEXT NOT NULL
+        )
+      ''');
+      
+      // Migrate existing author data to authors table
+      final existingBooks = await db.query('books');
+      for (var book in existingBooks) {
+        if (book['author'] != null && (book['author'] as String).isNotEmpty) {
+          try {
+            await db.insert('authors', {
+              'name': book['author'],
+              'createdAt': DateTime.now().toIso8601String(),
+            }, conflictAlgorithm: ConflictAlgorithm.ignore);
+          } catch (e) {
+            // Skip if author already exists
+          }
+        }
+      }
     }
   }
 
@@ -768,6 +794,42 @@ class DatabaseHelper {
       return await db.query('books', orderBy: 'seriesNumber ASC, createdAt DESC');
     }
     return await db.query('books', where: where, whereArgs: whereArgs, orderBy: 'seriesNumber ASC, createdAt DESC');
+  }
+  
+  // ==================== AUTHORS METHODS ====================
+  
+  Future<int> insertAuthor(Map<String, dynamic> author) async {
+    final db = await database;
+    return await db.insert('authors', author, conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+  
+  Future<List<Map<String, dynamic>>> getAuthors() async {
+    final db = await database;
+    return await db.query('authors', orderBy: 'name ASC');
+  }
+  
+  Future<int> updateAuthor(int id, Map<String, dynamic> author) async {
+    final db = await database;
+    return await db.update('authors', author, where: 'id = ?', whereArgs: [id]);
+  }
+  
+  Future<int> deleteAuthor(int id) async {
+    final db = await database;
+    return await db.delete('authors', where: 'id = ?', whereArgs: [id]);
+  }
+  
+  // Get books by author
+  Future<List<Map<String, dynamic>>> getBooksByAuthor(String author, {String? readingStatus}) async {
+    final db = await database;
+    String where = 'author = ?';
+    List<dynamic> whereArgs = [author];
+    
+    if (readingStatus != null) {
+      where += ' AND readingStatus = ?';
+      whereArgs.add(readingStatus);
+    }
+    
+    return await db.query('books', where: where, whereArgs: whereArgs, orderBy: 'createdAt DESC');
   }
   
   // ==================== BOOK GENRES (MANY-TO-MANY) METHODS ====================

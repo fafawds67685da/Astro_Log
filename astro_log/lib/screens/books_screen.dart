@@ -948,11 +948,11 @@ class AddEditBookScreen extends StatefulWidget {
 class _AddEditBookScreenState extends State<AddEditBookScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
-  final _authorController = TextEditingController();
   final _totalPagesController = TextEditingController();
   final _currentPageController = TextEditingController();
   
   String? _imagePath;
+  String? _selectedAuthor;
   ReadingStatus _readingStatus = ReadingStatus.notRead;
   Set<int> _selectedGenres = {};
   int? _selectedSeriesId;
@@ -962,6 +962,7 @@ class _AddEditBookScreenState extends State<AddEditBookScreen> {
   
   List<Map<String, dynamic>> _allGenres = [];
   List<Map<String, dynamic>> _allSeries = [];
+  List<Map<String, dynamic>> _allAuthors = [];
   
   final _db = DatabaseHelper.instance;
   bool _isLoading = true;
@@ -975,18 +976,20 @@ class _AddEditBookScreenState extends State<AddEditBookScreen> {
   Future<void> _loadData() async {
     final genres = await _db.getGenres();
     final series = await _db.getBookSeries();
+    final authors = await _db.getAuthors();
     
-    print('Loaded ${genres.length} genres and ${series.length} series');
+    print('Loaded ${genres.length} genres, ${series.length} series, and ${authors.length} authors');
     
     setState(() {
       _allGenres = genres;
       _allSeries = series;
+      _allAuthors = authors;
     });
     
     if (widget.book != null) {
       // Editing existing book
       _titleController.text = widget.book!['title'] ?? '';
-      _authorController.text = widget.book!['author'] ?? '';
+      _selectedAuthor = widget.book!['author'];
       _imagePath = widget.book!['imagePath'];
       
       // Load page numbers
@@ -1119,6 +1122,49 @@ class _AddEditBookScreenState extends State<AddEditBookScreen> {
     }
   }
   
+  Future<void> _addNewAuthor() async {
+    final nameController = TextEditingController();
+    
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add New Author'),
+        content: TextField(
+          controller: nameController,
+          decoration: const InputDecoration(
+            labelText: 'Author Name',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+    
+    if (result == true && nameController.text.trim().isNotEmpty) {
+      await _db.insertAuthor({
+        'name': nameController.text.trim(),
+        'createdAt': DateTime.now().toIso8601String(),
+      });
+      // Reload data and refresh UI
+      final authors = await _db.getAuthors();
+      print('After adding author, total authors: ${authors.length}');
+      setState(() {
+        _allAuthors = authors;
+        _selectedAuthor = nameController.text.trim();
+      });
+    }
+  }
+  
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
@@ -1144,9 +1190,16 @@ class _AddEditBookScreenState extends State<AddEditBookScreen> {
       return;
     }
     
+    if (_selectedAuthor == null || _selectedAuthor!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select an author')),
+      );
+      return;
+    }
+    
     final bookData = {
       'title': _titleController.text,
-      'author': _authorController.text,
+      'author': _selectedAuthor!,
       'imagePath': _imagePath,
       'readingStatus': _readingStatus == ReadingStatus.read 
           ? 'read' 
@@ -1258,13 +1311,38 @@ class _AddEditBookScreenState extends State<AddEditBookScreen> {
                     const SizedBox(height: 16),
                     
                     // Author
-                    TextFormField(
-                      controller: _authorController,
+                    DropdownButtonFormField<String>(
+                      value: _selectedAuthor,
                       decoration: const InputDecoration(
                         labelText: 'Author *',
                         border: OutlineInputBorder(),
                       ),
-                      validator: (v) => v?.isEmpty == true ? 'Required' : null,
+                      items: [
+                        const DropdownMenuItem(
+                          value: '__add_new__',
+                          child: Row(
+                            children: [
+                              Icon(Icons.add, color: Colors.purple),
+                              SizedBox(width: 8),
+                              Text('Add New Author', style: TextStyle(color: Colors.purple)),
+                            ],
+                          ),
+                        ),
+                        ..._allAuthors.map((author) => DropdownMenuItem<String>(
+                          value: author['name'] as String,
+                          child: Text(author['name'] as String),
+                        )),
+                      ],
+                      onChanged: (value) async {
+                        if (value == '__add_new__') {
+                          await _addNewAuthor();
+                        } else {
+                          setState(() {
+                            _selectedAuthor = value;
+                          });
+                        }
+                      },
+                      validator: (v) => v == null || v.isEmpty || v == '__add_new__' ? 'Please select an author' : null,
                     ),
                     const SizedBox(height: 24),
                     
@@ -1467,7 +1545,6 @@ class _AddEditBookScreenState extends State<AddEditBookScreen> {
   @override
   void dispose() {
     _titleController.dispose();
-    _authorController.dispose();
     _totalPagesController.dispose();
     _currentPageController.dispose();
     super.dispose();
