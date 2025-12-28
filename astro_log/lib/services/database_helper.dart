@@ -21,7 +21,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 5,
+      version: 7,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -181,6 +181,62 @@ class DatabaseHelper {
       } catch (e) {
         // Table doesn't exist yet or error migrating, skip
       }
+    }
+    
+    if (oldVersion < 6) {
+      // Create book_series table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS book_series (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          description TEXT,
+          createdAt TEXT NOT NULL
+        )
+      ''');
+      
+      // Create book_genres junction table for many-to-many relationship
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS book_genres (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          bookId INTEGER NOT NULL,
+          genreId INTEGER NOT NULL,
+          createdAt TEXT NOT NULL,
+          FOREIGN KEY (bookId) REFERENCES books (id) ON DELETE CASCADE,
+          FOREIGN KEY (genreId) REFERENCES genres (id) ON DELETE CASCADE,
+          UNIQUE(bookId, genreId)
+        )
+      ''');
+      
+      // Migrate existing genreId data to junction table
+      final existingBooks = await db.query('books');
+      for (var book in existingBooks) {
+        if (book['genreId'] != null) {
+          await db.insert('book_genres', {
+            'bookId': book['id'],
+            'genreId': book['genreId'],
+            'createdAt': DateTime.now().toIso8601String(),
+          });
+        }
+      }
+      
+      // Add series columns to books
+      await db.execute('ALTER TABLE books ADD COLUMN seriesId INTEGER');
+      await db.execute('ALTER TABLE books ADD COLUMN seriesNumber INTEGER');
+      
+      // Change isRead to readingStatus
+      await db.execute('ALTER TABLE books ADD COLUMN readingStatus TEXT DEFAULT "not_read"');
+      
+      // Migrate isRead values to readingStatus
+      await db.execute('UPDATE books SET readingStatus = "read" WHERE isRead = 1');
+      await db.execute('UPDATE books SET readingStatus = "not_read" WHERE isRead = 0 OR isRead IS NULL');
+      
+      // Note: Cannot drop genreId and isRead columns in SQLite, but we won't use them anymore
+    }
+    
+    if (oldVersion < 7) {
+      // Add page tracking columns
+      await db.execute('ALTER TABLE books ADD COLUMN totalPages INTEGER DEFAULT 0');
+      await db.execute('ALTER TABLE books ADD COLUMN currentPage INTEGER DEFAULT 0');
     }
   }
 
@@ -668,4 +724,184 @@ class DatabaseHelper {
       orderBy: 'createdAt DESC',
     );
   }
+  
+  // ==================== BOOK SERIES METHODS ====================
+  
+  Future<int> insertBookSeries(Map<String, dynamic> series) async {
+    final db = await database;
+    return await db.insert('book_series', series);
+  }
+  
+  Future<List<Map<String, dynamic>>> getBookSeries() async {
+    final db = await database;
+    return await db.query('book_series', orderBy: 'name ASC');
+  }
+  
+  Future<int> updateBookSeries(int id, Map<String, dynamic> series) async {
+    final db = await database;
+    return await db.update('book_series', series, where: 'id = ?', whereArgs: [id]);
+  }
+  
+  Future<int> deleteBookSeries(int id) async {
+    final db = await database;
+    return await db.delete('book_series', where: 'id = ?', whereArgs: [id]);
+  }
+  
+  // Get books by series (ordered by seriesNumber)
+  Future<List<Map<String, dynamic>>> getBooksBySeries(int? seriesId, {String? readingStatus}) async {
+    final db = await database;
+    String where = '';
+    List<dynamic> whereArgs = [];
+    
+    if (seriesId != null && readingStatus != null) {
+      where = 'seriesId = ? AND readingStatus = ?';
+      whereArgs = [seriesId, readingStatus];
+    } else if (seriesId != null) {
+      where = 'seriesId = ?';
+      whereArgs = [seriesId];
+    } else if (readingStatus != null) {
+      where = 'readingStatus = ?';
+      whereArgs = [readingStatus];
+    }
+    
+    if (where.isEmpty) {
+      return await db.query('books', orderBy: 'seriesNumber ASC, createdAt DESC');
+    }
+    return await db.query('books', where: where, whereArgs: whereArgs, orderBy: 'seriesNumber ASC, createdAt DESC');
+  }
+  
+  // ==================== BOOK GENRES (MANY-TO-MANY) METHODS ====================
+  
+  // Add genre to book
+  Future<int> addGenreToBook(int bookId, int genreId) async {
+    final db = await database;
+    return await db.insert('book_genres', {
+      'bookId': bookId,
+      'genreId': genreId,
+      'createdAt': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+  
+  // Remove genre from book
+  Future<int> removeGenreFromBook(int bookId, int genreId) async {
+    final db = await database;
+    return await db.delete(
+      'book_genres',
+      where: 'bookId = ? AND genreId = ?',
+      whereArgs: [bookId, genreId],
+    );
+  }
+  
+  // Get all genres for a specific book
+  Future<List<Map<String, dynamic>>> getBookGenres(int bookId) async {
+    final db = await database;
+    return await db.rawQuery('''
+      SELECT g.* FROM genres g
+      INNER JOIN book_genres bg ON g.id = bg.genreId
+      WHERE bg.bookId = ?
+      ORDER BY g.name ASC
+    ''', [bookId]);
+  }
+  
+  // Get all books for a specific genre with optional status filter
+  Future<List<Map<String, dynamic>>> getBooksByGenreNew(int genreId, {String? readingStatus}) async {
+    final db = await database;
+    String whereClause = readingStatus != null ? 'AND b.readingStatus = ?' : '';
+    List<dynamic> args = readingStatus != null ? [genreId, readingStatus] : [genreId];
+    
+    return await db.rawQuery('''
+      SELECT DISTINCT b.* FROM books b
+      INNER JOIN book_genres bg ON b.id = bg.bookId
+      WHERE bg.genreId = ? $whereClause
+      ORDER BY b.createdAt DESC
+    ''', args);
+  }
+  
+  // Get all books with optional status filter (replacement for old method)
+  Future<List<Map<String, dynamic>>> getAllBooks({String? readingStatus}) async {
+    final db = await database;
+    if (readingStatus != null) {
+      return await db.query(
+        'books',
+        where: 'readingStatus = ?',
+        whereArgs: [readingStatus],
+        orderBy: 'createdAt DESC',
+      );
+    }
+    return await db.query('books', orderBy: 'createdAt DESC');
+  }
+  
+  // Get count of books by reading status
+  Future<Map<String, int>> getBookStatusCounts() async {
+    final db = await database;
+    final result = await db.rawQuery('''
+      SELECT 
+        readingStatus,
+        COUNT(*) as count
+      FROM books
+      GROUP BY readingStatus
+    ''');
+    
+    Map<String, int> counts = {
+      'read': 0,
+      'reading': 0,
+      'not_read': 0,
+    };
+    
+    for (var row in result) {
+      counts[row['readingStatus'] as String] = row['count'] as int;
+    }
+    
+    return counts;
+  }
+  
+  // Get reading statistics for dashboard
+  Future<Map<String, dynamic>> getReadingStatistics() async {
+    final db = await database;
+    
+    // Get status counts
+    final statusCounts = await getBookStatusCounts();
+    
+    // Get page statistics
+    final pageStats = await db.rawQuery('''
+      SELECT 
+        SUM(totalPages) as totalPages,
+        SUM(CASE WHEN readingStatus = "read" THEN totalPages ELSE 0 END) as pagesRead,
+        SUM(CASE WHEN readingStatus = "reading" THEN currentPage ELSE 0 END) as currentlyReadingPages,
+        SUM(CASE WHEN readingStatus = "reading" THEN totalPages ELSE 0 END) as currentlyReadingTotalPages
+      FROM books
+      WHERE totalPages > 0
+    ''');
+    
+    final stats = pageStats.first;
+    final totalPages = (stats['totalPages'] as int?) ?? 0;
+    final pagesRead = (stats['pagesRead'] as int?) ?? 0;
+    final currentlyReadingPages = (stats['currentlyReadingPages'] as int?) ?? 0;
+    final currentlyReadingTotalPages = (stats['currentlyReadingTotalPages'] as int?) ?? 0;
+    
+    final totalPagesCompleted = pagesRead + currentlyReadingPages;
+    final overallProgress = totalPages > 0 ? (totalPagesCompleted / totalPages * 100) : 0.0;
+    final pagesRemaining = totalPages - totalPagesCompleted;
+    
+    return {
+      'booksRead': statusCounts['read'] ?? 0,
+      'booksReading': statusCounts['reading'] ?? 0,
+      'booksNotRead': statusCounts['not_read'] ?? 0,
+      'totalBooks': (statusCounts['read'] ?? 0) + (statusCounts['reading'] ?? 0) + (statusCounts['not_read'] ?? 0),
+      'totalPages': totalPages,
+      'pagesRead': pagesRead,
+      'currentlyReadingPages': currentlyReadingPages,
+      'currentlyReadingTotalPages': currentlyReadingTotalPages,
+      'totalPagesCompleted': totalPagesCompleted,
+      'pagesRemaining': pagesRemaining,
+      'overallProgress': overallProgress,
+      'readPercentage': statusCounts['read'] != null && (statusCounts['read']! + statusCounts['reading']! + statusCounts['not_read']!) > 0
+          ? (statusCounts['read']! / (statusCounts['read']! + statusCounts['reading']! + statusCounts['not_read']!) * 100)
+          : 0.0,
+      'readingPercentage': statusCounts['reading'] != null && (statusCounts['read']! + statusCounts['reading']! + statusCounts['not_read']!) > 0
+          ? (statusCounts['reading']! / (statusCounts['read']! + statusCounts['reading']! + statusCounts['not_read']!) * 100)
+          : 0.0,
+    };
+  }
 }
+

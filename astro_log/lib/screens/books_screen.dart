@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'dart:io';
+import 'dart:ui';
 import '../services/database_helper.dart';
+import '../services/image_service.dart';
+import 'genre_series_manager_screen.dart';
 
 class BooksScreen extends StatefulWidget {
   const BooksScreen({Key? key}) : super(key: key);
@@ -10,838 +14,740 @@ class BooksScreen extends StatefulWidget {
   State<BooksScreen> createState() => _BooksScreenState();
 }
 
+enum ViewMode { all, genres, series }
+enum ReadingStatus { all, read, reading, notRead }
+
 class _BooksScreenState extends State<BooksScreen> {
   final DatabaseHelper _db = DatabaseHelper.instance;
-  final ImagePicker _picker = ImagePicker();
-  int? _selectedGenreId;
-  List<Map<String, dynamic>> _genres = [];
-
+  final ImageService _imageService = ImageService.instance;
+  
+  ViewMode _viewMode = ViewMode.all;
+  Set<ReadingStatus> _statusFilters = {ReadingStatus.all};
+  
   @override
-  void initState() {
-    super.initState();
-    _loadGenres();
-  }
-
-  Future<void> _loadGenres() async {
-    final genres = await _db.getGenres();
-    setState(() {
-      _genres = genres;
-    });
-  }
-
-  Future<void> _manageGenres() async {
-    await showDialog(
-      context: context,
-      builder: (context) => _GenreManagementDialog(
-        genres: _genres,
-        onGenresChanged: () async {
-          await _loadGenres();
-          setState(() {});
-        },
-      ),
-    );
-  }
-
-  Future<void> _addNewBook() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-    if (image == null) return;
-
-    final titleController = TextEditingController();
-    final authorController = TextEditingController();
-    String status = 'To Read';
-    int? genreId;
-
-    if (!mounted) return;
-    
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: const Color(0xFF1A1A2E),
-              title: const Text('Add New Book', style: TextStyle(color: Colors.white)),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.file(
-                        File(image.path),
-                        height: 150,
-                        width: 100,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: titleController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
-                        labelText: 'Book Title',
-                        labelStyle: TextStyle(color: Colors.white70),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.white30),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.purpleAccent),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: authorController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
-                        labelText: 'Author',
-                        labelStyle: TextStyle(color: Colors.white70),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.white30),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.purpleAccent),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<int?>(
-                      value: genreId,
-                      dropdownColor: const Color(0xFF16213E),
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
-                        labelText: 'Genre',
-                        labelStyle: TextStyle(color: Colors.white70),
-                      ),
-                      items: [
-                        const DropdownMenuItem<int?>(
-                          value: null,
-                          child: Text('No Genre'),
-                        ),
-                        const DropdownMenuItem<int?>(
-                          value: -1,
-                          child: Text('+ Add New Genre'),
-                        ),
-                        ..._genres.map((g) => DropdownMenuItem<int?>(
-                          value: g['id'],
-                          child: Text(g['name']),
-                        )),
-                      ],
-                      onChanged: (value) async {
-                        if (value == -1) {
-                          final controller = TextEditingController();
-                          final newGenre = await showDialog<String>(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              backgroundColor: const Color(0xFF1A1A2E),
-                              title: const Text('New Genre', style: TextStyle(color: Colors.white)),
-                              content: TextField(
-                                controller: controller,
-                                autofocus: true,
-                                style: const TextStyle(color: Colors.white),
-                                decoration: const InputDecoration(
-                                  labelText: 'Genre Name',
-                                  labelStyle: TextStyle(color: Colors.white70),
-                                ),
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(ctx),
-                                  child: const Text('Cancel'),
-                                ),
-                                ElevatedButton(
-                                  onPressed: () => Navigator.pop(ctx, controller.text),
-                                  child: const Text('Add'),
-                                ),
-                              ],
-                            ),
-                          );
-                          if (newGenre != null && newGenre.isNotEmpty) {
-                            final id = await _db.insertGenre({
-                              'name': newGenre,
-                              'createdAt': DateTime.now().toIso8601String(),
-                            });
-                            await _loadGenres();
-                            setDialogState(() => genreId = id);
-                          }
-                        } else {
-                          setDialogState(() => genreId = value);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      value: status,
-                      dropdownColor: const Color(0xFF16213E),
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
-                        labelText: 'Status',
-                        labelStyle: TextStyle(color: Colors.white70),
-                      ),
-                      items: ['Read', 'To Read', 'Reading'].map((s) {
-                        return DropdownMenuItem(value: s, child: Text(s));
-                      }).toList(),
-                      onChanged: (value) => setDialogState(() => status = value!),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    if (titleController.text.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Please enter a book title')),
-                      );
-                      return;
-                    }
-
-                    final savedPath = await _db.saveImage(File(image.path));
-                    await _db.insertBook({
-                      'title': titleController.text,
-                      'author': authorController.text.isEmpty ? 'Unknown Author' : authorController.text,
-                      'imagePath': savedPath,
-                      'isRead': status == 'Read' ? 1 : 0,
-                      'genreId': genreId,
-                      'createdAt': DateTime.now().toIso8601String(),
-                    });
-
-                    if (!mounted) return;
-                    Navigator.pop(context);
-                    setState(() {});
-                  },
-                  child: const Text('Add'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Future<void> _editBook(Map<String, dynamic> book) async {
-    final titleController = TextEditingController(text: book['title']);
-    final authorController = TextEditingController(text: book['author']);
-    String status = book['isRead'] == 1 ? 'Read' : 'To Read';
-    int? genreId = book['genreId'];
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF1A1A2E),
-          title: const Text('Edit Book', style: TextStyle(color: Colors.white)),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    labelText: 'Book Title',
-                    labelStyle: TextStyle(color: Colors.white70),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.white30),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.purpleAccent),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: authorController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    labelText: 'Author',
-                    labelStyle: TextStyle(color: Colors.white70),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.white30),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.purpleAccent),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<int?>(
-                  value: genreId,
-                  dropdownColor: const Color(0xFF16213E),
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    labelText: 'Genre',
-                    labelStyle: TextStyle(color: Colors.white70),
-                  ),
-                  items: [
-                    const DropdownMenuItem<int?>(
-                      value: null,
-                      child: Text('No Genre'),
-                    ),
-                    const DropdownMenuItem<int?>(
-                      value: -1,
-                      child: Text('+ Add New Genre'),
-                    ),
-                    ..._genres.map((g) => DropdownMenuItem<int?>(
-                      value: g['id'],
-                      child: Text(g['name']),
-                    )),
-                  ],
-                  onChanged: (value) async {
-                    if (value == -1) {
-                      final controller = TextEditingController();
-                      final newGenre = await showDialog<String>(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          backgroundColor: const Color(0xFF1A1A2E),
-                          title: const Text('New Genre', style: TextStyle(color: Colors.white)),
-                          content: TextField(
-                            controller: controller,
-                            autofocus: true,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: const InputDecoration(
-                              labelText: 'Genre Name',
-                              labelStyle: TextStyle(color: Colors.white70),
-                            ),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(ctx),
-                              child: const Text('Cancel'),
-                            ),
-                            ElevatedButton(
-                              onPressed: () => Navigator.pop(ctx, controller.text),
-                              child: const Text('Add'),
-                            ),
-                          ],
-                        ),
-                      );
-                      if (newGenre != null && newGenre.isNotEmpty) {
-                        final id = await _db.insertGenre({
-                          'name': newGenre,
-                          'createdAt': DateTime.now().toIso8601String(),
-                        });
-                        await _loadGenres();
-                        setDialogState(() => genreId = id);
-                      }
-                    } else {
-                      setDialogState(() => genreId = value);
-                    }
-                  },
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: status,
-                  dropdownColor: const Color(0xFF16213E),
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    labelText: 'Status',
-                    labelStyle: TextStyle(color: Colors.white70),
-                  ),
-                  items: ['Read', 'To Read', 'Reading'].map((s) {
-                    return DropdownMenuItem(value: s, child: Text(s));
-                  }).toList(),
-                  onChanged: (value) => setDialogState(() => status = value!),
-                ),
-              ],
-            ),
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F0E17),
+      appBar: AppBar(
+        title: const Text('Book Library'),
+        backgroundColor: const Color(0xFF1A1A2E),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: _addNewBook,
+            tooltip: 'Add Book',
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (titleController.text.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please enter a book title')),
-                  );
-                  return;
-                }
-
-                await _db.updateBook(book['id'], {
-                  'title': titleController.text,
-                  'author': authorController.text.isEmpty ? 'Unknown Author' : authorController.text,
-                  'imagePath': book['imagePath'],
-                  'isRead': status == 'Read' ? 1 : 0,
-                  'genreId': genreId,
-                  'createdAt': book['createdAt'],
-                });
-
-                if (context.mounted) Navigator.pop(context, true);
-              },
-              child: const Text('Update'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (result == true) {
-      setState(() {});
-    }
-  }
-
-  Future<void> _changeBookStatus(Map<String, dynamic> book, String newStatus) async {
-    await _db.updateBook(book['id'], {
-      ...book,
-      'isRead': newStatus == 'Read' ? 1 : 0,
-    });
-    setState(() {});
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Moved to $newStatus'),
-        duration: const Duration(seconds: 1),
-      ),
-    );
-  }
-
-  Future<void> _deleteBook(int id, String imagePath) async {
-    await _db.deleteBook(id);
-    // Delete image file
-    final file = File(imagePath);
-    if (await file.exists()) {
-      await file.delete();
-    }
-    setState(() {});
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        backgroundColor: const Color(0xFF0F0E17),
-        appBar: AppBar(
-          title: const Text('My Books'),
-          backgroundColor: const Color(0xFF1A1A2E),
-          bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(100),
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: DropdownButtonFormField<int?>(
-                    value: _selectedGenreId,
-                    dropdownColor: const Color(0xFF16213E),
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
-                      labelText: 'Filter by Genre',
-                      labelStyle: TextStyle(color: Colors.white70),
-                      prefixIcon: Icon(Icons.filter_list, color: Colors.white70),
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      const DropdownMenuItem<int?>(
-                        value: null,
-                        child: Text('All Genres'),
-                      ),
-                      ..._genres.map((g) => DropdownMenuItem<int?>(
-                        value: g['id'],
-                        child: Text(g['name']),
-                      )),
-                    ],
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedGenreId = value;
-                      });
-                    },
-                  ),
-                ),
-                const TabBar(
-                  indicatorColor: Colors.purpleAccent,
-                  tabs: [
-                    Tab(text: 'Read', icon: Icon(Icons.check_circle)),
-                    Tab(text: 'To Read', icon: Icon(Icons.radio_button_unchecked)),
-                    Tab(text: 'Reading', icon: Icon(Icons.menu_book)),
-                  ],
-                ),
-              ],
-            ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: _manageGenresAndSeries,
+            tooltip: 'Manage Genres & Series',
           ),
-        ),
-        body: TabBarView(
-          children: [
-            _BookGrid(
-              status: 'Read',
-              genreId: _selectedGenreId,
-              onEdit: _editBook,
-              onChangeStatus: _changeBookStatus,
-              onDelete: _deleteBook,
-            ),
-            _BookGrid(
-              status: 'To Read',
-              genreId: _selectedGenreId,
-              onEdit: _editBook,
-              onChangeStatus: _changeBookStatus,
-              onDelete: _deleteBook,
-            ),
-            _BookGrid(
-              status: 'Reading',
-              genreId: _selectedGenreId,
-              onEdit: _editBook,
-              onChangeStatus: _changeBookStatus,
-              onDelete: _deleteBook,
-            ),
-          ],
-        ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: _addNewBook,
-          backgroundColor: Colors.purpleAccent,
-          child: const Icon(Icons.add),
-        ),
+        ],
       ),
-    );
-  }
-}
-
-class _BookGrid extends StatelessWidget {
-  final String status;
-  final int? genreId;
-  final Function(Map<String, dynamic>) onEdit;
-  final Function(Map<String, dynamic>, String) onChangeStatus;
-  final Function(int, String) onDelete;
-
-  const _BookGrid({
-    required this.status,
-    this.genreId,
-    required this.onEdit,
-    required this.onChangeStatus,
-    required this.onDelete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<Map<String, dynamic>>(
-      future: Future.wait([
-        DatabaseHelper.instance.getBooksByGenre(
-          genreId,
-          isRead: status == 'Read' ? true : (status == 'To Read' ? false : null),
-        ),
-        DatabaseHelper.instance.getGenres(),
-      ]).then((results) => <String, dynamic>{'books': results[0], 'genres': results[1]}),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        if (!snapshot.hasData) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.menu_book, size: 64, color: Colors.white30),
-                const SizedBox(height: 16),
-                Text(
-                  'No $status books',
-                  style: const TextStyle(color: Colors.white54, fontSize: 18),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Tap + to add a book cover',
-                  style: TextStyle(color: Colors.white38, fontSize: 14),
-                ),
-              ],
-            ),
-          );
-        }
-
-        final data = snapshot.data as Map;
-        final allBooks = data['books'] as List<Map<String, dynamic>>;
-        final genres = data['genres'] as List<Map<String, dynamic>>;
-
-        // Filter books by status
-        final books = allBooks.where((book) {
-          if (status == 'Read') return book['isRead'] == 1;
-          if (status == 'To Read') return book['isRead'] == 0;
-          return book['isRead'] == 0;
-        }).toList();
-
-        if (books.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.menu_book, size: 64, color: Colors.white30),
-                const SizedBox(height: 16),
-                Text(
-                  'No $status books',
-                  style: const TextStyle(color: Colors.white54, fontSize: 18),
-                ),
-              ],
-            ),
-          );
-        }
-
-        // Group books by genre
-        final Map<String, List<Map<String, dynamic>>> groupedBooks = {};
-        
-        // Add unassigned books first (only if there are any)
-        final unassignedBooks = books.where((b) => b['genreId'] == null).toList();
-        if (unassignedBooks.isNotEmpty) {
-          groupedBooks['Unassigned'] = unassignedBooks;
-        }
-        
-        // Add books grouped by genre
-        for (var genre in genres) {
-          final genreBooks = books.where((b) => b['genreId'] == genre['id']).toList();
-          if (genreBooks.isNotEmpty) {
-            groupedBooks[genre['name']] = genreBooks;
-          }
-        }
-
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: groupedBooks.length,
-          itemBuilder: (context, index) {
-            final genreName = groupedBooks.keys.elementAt(index);
-            final genreBooks = groupedBooks[genreName]!;
-
-            return Container(
-              margin: EdgeInsets.only(bottom: index < groupedBooks.length - 1 ? 24 : 0),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A1A2E),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.purpleAccent.withOpacity(0.3)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.purpleAccent.withOpacity(0.1),
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(16),
-                        topRight: Radius.circular(16),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.folder, color: Colors.purpleAccent, size: 24),
-                        const SizedBox(width: 12),
-                        Text(
-                          genreName,
-                          style: const TextStyle(
-                            color: Colors.purpleAccent,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.purpleAccent.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            '${genreBooks.length}',
-                            style: const TextStyle(
-                              color: Colors.purpleAccent,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        childAspectRatio: 0.65,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                      ),
-                      itemCount: genreBooks.length,
-                      itemBuilder: (ctx, idx) {
-                        final book = genreBooks[idx];
-                        return _BookCard(
-                          book: book,
-                          currentStatus: status,
-                          onEdit: onEdit,
-                          onChangeStatus: onChangeStatus,
-                          onDelete: onDelete,
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
-class _BookCard extends StatelessWidget {
-  final Map<String, dynamic> book;
-  final String currentStatus;
-  final Function(Map<String, dynamic>) onEdit;
-  final Function(Map<String, dynamic>, String) onChangeStatus;
-  final Function(int, String) onDelete;
-
-  const _BookCard({
-    required this.book,
-    required this.currentStatus,
-    required this.onEdit,
-    required this.onChangeStatus,
-    required this.onDelete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      elevation: 4,
-      color: const Color(0xFF1A1A2E),
-      child: Stack(
-        fit: StackFit.expand,
+      drawer: _buildDrawer(),
+      body: Column(
         children: [
-          Image.file(
-            File(book['imagePath']),
-            fit: BoxFit.cover,
-          ),
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [
-                    Colors.black.withOpacity(0.9),
-                    Colors.black.withOpacity(0.7),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    book['title'],
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    book['author'],
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.8),
-                      fontSize: 12,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+          _buildStatusFilters(),
+          Expanded(child: _buildContentByMode()),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildDrawer() {
+    return Drawer(
+      backgroundColor: const Color(0xFF1A1A2E),
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          DrawerHeader(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF9D50BB), Color(0xFF6E48AA)],
               ),
             ),
-          ),
-          Positioned(
-            top: 8,
-            right: 8,
-            child: PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, color: Colors.white),
-              color: const Color(0xFF16213E),
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'edit',
-                  child: Text('Edit', style: TextStyle(color: Colors.white)),
-                ),
-                if (currentStatus != 'Read')
-                  const PopupMenuItem(
-                    value: 'read',
-                    child: Text('Mark as Read', style: TextStyle(color: Colors.white)),
-                  ),
-                if (currentStatus != 'To Read')
-                  const PopupMenuItem(
-                    value: 'toread',
-                    child: Text('Mark as To Read', style: TextStyle(color: Colors.white)),
-                  ),
-                if (currentStatus != 'Reading')
-                  const PopupMenuItem(
-                    value: 'reading',
-                    child: Text('Mark as Reading', style: TextStyle(color: Colors.white)),
-                  ),
-                const PopupMenuItem(
-                  value: 'delete',
-                  child: Text('Delete', style: TextStyle(color: Colors.redAccent)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Icon(Icons.menu_book, size: 48, color: Colors.white),
+                SizedBox(height: 8),
+                Text(
+                  'View Options',
+                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
                 ),
               ],
-              onSelected: (value) {
-                if (value == 'edit') {
-                  onEdit(book);
-                } else if (value == 'delete') {
-                  onDelete(book['id'], book['imagePath']);
-                } else if (value == 'read') {
-                  onChangeStatus(book, 'Read');
-                } else if (value == 'toread') {
-                  onChangeStatus(book, 'To Read');
-                } else if (value == 'reading') {
-                  onChangeStatus(book, 'Reading');
-                }
-              },
             ),
+          ),
+          ListTile(
+            leading: Icon(Icons.list, color: _viewMode == ViewMode.all ? Colors.purpleAccent : Colors.white70),
+            title: Text('All Books', style: TextStyle(color: Colors.white)),
+            selected: _viewMode == ViewMode.all,
+            selectedTileColor: Colors.purpleAccent.withOpacity(0.1),
+            onTap: () {
+              setState(() => _viewMode = ViewMode.all);
+              Navigator.pop(context);
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.folder, color: _viewMode == ViewMode.genres ? Colors.purpleAccent : Colors.white70),
+            title: Text('By Genres', style: TextStyle(color: Colors.white)),
+            selected: _viewMode == ViewMode.genres,
+            selectedTileColor: Colors.purpleAccent.withOpacity(0.1),
+            onTap: () {
+              setState(() => _viewMode = ViewMode.genres);
+              Navigator.pop(context);
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.collections_bookmark, color: _viewMode == ViewMode.series ? Colors.purpleAccent : Colors.white70),
+            title: Text('By Series', style: TextStyle(color: Colors.white)),
+            selected: _viewMode == ViewMode.series,
+            selectedTileColor: Colors.purpleAccent.withOpacity(0.1),
+            onTap: () {
+              setState(() => _viewMode = ViewMode.series);
+              Navigator.pop(context);
+            },
           ),
         ],
       ),
     );
   }
+  
+  Widget _buildStatusFilters() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Wrap(
+        spacing: 8,
+        children: [
+          FilterChip(
+            label: Text('All'),
+            selected: _statusFilters.contains(ReadingStatus.all),
+            onSelected: (selected) {
+              setState(() {
+                if (selected) {
+                  _statusFilters = {ReadingStatus.all};
+                } else if (_statusFilters.length > 1) {
+                  _statusFilters.remove(ReadingStatus.all);
+                }
+              });
+            },
+            backgroundColor: Color(0xFF1A1A2E),
+            selectedColor: Colors.purpleAccent,
+            labelStyle: TextStyle(color: Colors.white),
+          ),
+          FilterChip(
+            label: Text('Read ✓'),
+            selected: _statusFilters.contains(ReadingStatus.read),
+            onSelected: (selected) {
+              setState(() {
+                _statusFilters.remove(ReadingStatus.all);
+                if (selected) {
+                  _statusFilters.add(ReadingStatus.read);
+                } else {
+                  _statusFilters.remove(ReadingStatus.read);
+                }
+                if (_statusFilters.isEmpty) _statusFilters = {ReadingStatus.all};
+              });
+            },
+            backgroundColor: Color(0xFF1A1A2E),
+            selectedColor: Colors.greenAccent,
+            labelStyle: TextStyle(color: Colors.white),
+          ),
+          FilterChip(
+            label: Text('Reading 📖'),
+            selected: _statusFilters.contains(ReadingStatus.reading),
+            onSelected: (selected) {
+              setState(() {
+                _statusFilters.remove(ReadingStatus.all);
+                if (selected) {
+                  _statusFilters.add(ReadingStatus.reading);
+                } else {
+                  _statusFilters.remove(ReadingStatus.reading);
+                }
+                if (_statusFilters.isEmpty) _statusFilters = {ReadingStatus.all};
+              });
+            },
+            backgroundColor: Color(0xFF1A1A2E),
+            selectedColor: Colors.orangeAccent,
+            labelStyle: TextStyle(color: Colors.white),
+          ),
+          FilterChip(
+            label: Text('Not Read ○'),
+            selected: _statusFilters.contains(ReadingStatus.notRead),
+            onSelected: (selected) {
+              setState(() {
+                _statusFilters.remove(ReadingStatus.all);
+                if (selected) {
+                  _statusFilters.add(ReadingStatus.notRead);
+                } else {
+                  _statusFilters.remove(ReadingStatus.notRead);
+                }
+                if (_statusFilters.isEmpty) _statusFilters = {ReadingStatus.all};
+              });
+            },
+            backgroundColor: Color(0xFF1A1A2E),
+            selectedColor: Colors.blueAccent,
+            labelStyle: TextStyle(color: Colors.white),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildContentByMode() {
+    switch (_viewMode) {
+      case ViewMode.all:
+        return _buildAllBooksView();
+      case ViewMode.genres:
+        return _buildGenresView();
+      case ViewMode.series:
+        return _buildSeriesView();
+    }
+  }
+  
+  Widget _buildAllBooksView() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _getFilteredBooks(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator(color: Colors.purpleAccent));
+        }
+        
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return _buildEmptyState('No books found', 'Add your first book to get started');
+        }
+        
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: snapshot.data!.length,
+          itemBuilder: (context, index) {
+            final book = snapshot.data![index];
+            return _buildBookCard(book);
+          },
+        );
+      },
+    );
+  }
+  
+  Widget _buildGenresView() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _db.getGenres(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return _buildEmptyState('No genres', 'Create genres in settings');
+        }
+        
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: snapshot.data!.length,
+          itemBuilder: (context, index) {
+            final genre = snapshot.data![index];
+            return _buildGenreFolder(genre);
+          },
+        );
+      },
+    );
+  }
+  
+  Widget _buildSeriesView() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _db.getBookSeries(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return _buildEmptyState('No series', 'Create book series in settings');
+        }
+        
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: snapshot.data!.length + 1, // +1 for standalone books
+          itemBuilder: (context, index) {
+            if (index == snapshot.data!.length) {
+              return _buildStandaloneBooksFolder();
+            }
+            final series = snapshot.data![index];
+            return _buildSeriesFolder(series);
+          },
+        );
+      },
+    );
+  }
+  
+  Widget _buildGenreFolder(Map<String, dynamic> genre) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _getBooksByGenreFiltered(genre['id']),
+      builder: (context, snapshot) {
+        final bookCount = snapshot.data?.length ?? 0;
+        if (bookCount == 0 && !_statusFilters.contains(ReadingStatus.all)) {
+          return SizedBox.shrink();
+        }
+        
+        return ExpansionTile(
+          leading: Icon(Icons.folder, color: Colors.purpleAccent, size: 32),
+          title: Text(
+            genre['name'],
+            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          subtitle: Text(
+            '$bookCount books',
+            style: TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          backgroundColor: Color(0xFF1A1A2E),
+          collapsedBackgroundColor: Color(0xFF1A1A2E),
+          children: snapshot.data?.map((book) => _buildBookCard(book)).toList() ?? [],
+        );
+      },
+    );
+  }
+  
+  Widget _buildSeriesFolder(Map<String, dynamic> series) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _getBooksBySeriesFiltered(series['id']),
+      builder: (context, snapshot) {
+        final bookCount = snapshot.data?.length ?? 0;
+        if (bookCount == 0 && !_statusFilters.contains(ReadingStatus.all)) {
+          return SizedBox.shrink();
+        }
+        
+        return ExpansionTile(
+          leading: Icon(Icons.collections_bookmark, color: Colors.cyanAccent, size: 32),
+          title: Text(
+            series['name'],
+            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          subtitle: Text(
+            '$bookCount books',
+            style: TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          backgroundColor: Color(0xFF1A1A2E),
+          collapsedBackgroundColor: Color(0xFF1A1A2E),
+          children: snapshot.data?.map((book) => _buildBookCard(book, showSeriesNumber: true)).toList() ?? [],
+        );
+      },
+    );
+  }
+  
+  Widget _buildStandaloneBooksFolder() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _getStandaloneBooks(),
+      builder: (context, snapshot) {
+        final bookCount = snapshot.data?.length ?? 0;
+        if (bookCount == 0) return SizedBox.shrink();
+        
+        return ExpansionTile(
+          leading: Icon(Icons.book, color: Colors.orangeAccent, size: 32),
+          title: Text(
+            'Standalone Books',
+            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          subtitle: Text(
+            '$bookCount books',
+            style: TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          backgroundColor: Color(0xFF1A1A2E),
+          collapsedBackgroundColor: Color(0xFF1A1A2E),
+          children: snapshot.data?.map((book) => _buildBookCard(book)).toList() ?? [],
+        );
+      },
+    );
+  }
+  
+  Widget _buildBookCard(Map<String, dynamic> book, {bool showSeriesNumber = false}) {
+    final readingStatus = book['readingStatus'] ?? 'not_read';
+    IconData statusIcon;
+    Color statusColor;
+    
+    switch (readingStatus) {
+      case 'read':
+        statusIcon = Icons.check_circle;
+        statusColor = Colors.greenAccent;
+        break;
+      case 'reading':
+        statusIcon = Icons.menu_book;
+        statusColor = Colors.orangeAccent;
+        break;
+      default:
+        statusIcon = Icons.circle_outlined;
+        statusColor = Colors.blueAccent;
+    }
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      color: Color(0xFF1A1A2E),
+      child: ListTile(
+        leading: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.file(
+            File(book['imagePath']),
+            width: 50,
+            height: 70,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => Container(
+              width: 50,
+              height: 70,
+              color: Colors.grey,
+              child: Icon(Icons.book, color: Colors.white),
+            ),
+          ),
+        ),
+        title: Row(
+          children: [
+            if (showSeriesNumber && book['seriesNumber'] != null)
+              Container(
+                margin: EdgeInsets.only(right: 8),
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.cyanAccent,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '#${book['seriesNumber']}',
+                  style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+              ),
+            Expanded(
+              child: Text(
+                book['title'],
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ),
+            Icon(statusIcon, color: statusColor, size: 20),
+          ],
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (book['author'] != null)
+              Text(
+                book['author'],
+                style: TextStyle(color: Colors.white70),
+              ),
+            SizedBox(height: 4),
+            FutureBuilder<List<Map<String, dynamic>>>(
+              future: _db.getBookGenres(book['id']),
+              builder: (context, genreSnapshot) {
+                if (!genreSnapshot.hasData || genreSnapshot.data!.isEmpty) {
+                  return SizedBox.shrink();
+                }
+                return Wrap(
+                  spacing: 4,
+                  children: genreSnapshot.data!.take(3).map((genre) => 
+                    Chip(
+                      label: Text(
+                        genre['name'],
+                        style: TextStyle(color: Colors.white, fontSize: 10),
+                      ),
+                      backgroundColor: Colors.purpleAccent.withOpacity(0.3),
+                      padding: EdgeInsets.zero,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ).toList(),
+                );
+              },
+            ),
+          ],
+        ),
+        trailing: PopupMenuButton<String>(
+          icon: Icon(Icons.more_vert, color: Colors.white70),
+          color: Color(0xFF16213E),
+          itemBuilder: (context) => [
+            PopupMenuItem(
+              value: 'download',
+              child: Row(
+                children: [
+                  Icon(Icons.download, color: Colors.cyanAccent),
+                  SizedBox(width: 8),
+                  Text('Download Image', style: TextStyle(color: Colors.white)),
+                ],
+              ),
+            ),
+            PopupMenuItem(
+              value: 'edit',
+              child: Row(
+                children: [
+                  Icon(Icons.edit, color: Colors.orangeAccent),
+                  SizedBox(width: 8),
+                  Text('Edit', style: TextStyle(color: Colors.white)),
+                ],
+              ),
+            ),
+            PopupMenuItem(
+              value: 'delete',
+              child: Row(
+                children: [
+                  Icon(Icons.delete, color: Colors.redAccent),
+                  SizedBox(width: 8),
+                  Text('Delete', style: TextStyle(color: Colors.redAccent)),
+                ],
+              ),
+            ),
+          ],
+          onSelected: (value) async {
+            switch (value) {
+              case 'download':
+                await _downloadBookImage(book);
+                break;
+              case 'edit':
+                await _editBook(book);
+                break;
+              case 'delete':
+                await _deleteBook(book);
+                break;
+            }
+          },
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildEmptyState(String title, String subtitle) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.menu_book, size: 80, color: Colors.purpleAccent.withOpacity(0.3)),
+          SizedBox(height: 16),
+          Text(title, style: TextStyle(color: Colors.white70, fontSize: 24)),
+          SizedBox(height: 8),
+          Text(subtitle, style: TextStyle(color: Colors.white38)),
+        ],
+      ),
+    );
+  }
+  
+  Future<List<Map<String, dynamic>>> _getFilteredBooks() async {
+    if (_statusFilters.contains(ReadingStatus.all)) {
+      return await _db.getAllBooks();
+    }
+    
+    List<Map<String, dynamic>> allBooks = [];
+    if (_statusFilters.contains(ReadingStatus.read)) {
+      final books = await _db.getAllBooks(readingStatus: 'read');
+      allBooks.addAll(books);
+    }
+    if (_statusFilters.contains(ReadingStatus.reading)) {
+      final books = await _db.getAllBooks(readingStatus: 'reading');
+      allBooks.addAll(books);
+    }
+    if (_statusFilters.contains(ReadingStatus.notRead)) {
+      final books = await _db.getAllBooks(readingStatus: 'not_read');
+      allBooks.addAll(books);
+    }
+    return allBooks;
+  }
+  
+  Future<List<Map<String, dynamic>>> _getBooksByGenreFiltered(int genreId) async {
+    if (_statusFilters.contains(ReadingStatus.all)) {
+      return await _db.getBooksByGenreNew(genreId);
+    }
+    
+    List<Map<String, dynamic>> allBooks = [];
+    if (_statusFilters.contains(ReadingStatus.read)) {
+      final books = await _db.getBooksByGenreNew(genreId, readingStatus: 'read');
+      allBooks.addAll(books);
+    }
+    if (_statusFilters.contains(ReadingStatus.reading)) {
+      final books = await _db.getBooksByGenreNew(genreId, readingStatus: 'reading');
+      allBooks.addAll(books);
+    }
+    if (_statusFilters.contains(ReadingStatus.notRead)) {
+      final books = await _db.getBooksByGenreNew(genreId, readingStatus: 'not_read');
+      allBooks.addAll(books);
+    }
+    return allBooks;
+  }
+  
+  Future<List<Map<String, dynamic>>> _getBooksBySeriesFiltered(int seriesId) async {
+    if (_statusFilters.contains(ReadingStatus.all)) {
+      return await _db.getBooksBySeries(seriesId);
+    }
+    
+    List<Map<String, dynamic>> allBooks = [];
+    if (_statusFilters.contains(ReadingStatus.read)) {
+      final books = await _db.getBooksBySeries(seriesId, readingStatus: 'read');
+      allBooks.addAll(books);
+    }
+    if (_statusFilters.contains(ReadingStatus.reading)) {
+      final books = await _db.getBooksBySeries(seriesId, readingStatus: 'reading');
+      allBooks.addAll(books);
+    }
+    if (_statusFilters.contains(ReadingStatus.notRead)) {
+      final books = await _db.getBooksBySeries(seriesId, readingStatus: 'not_read');
+      allBooks.addAll(books);
+    }
+    return allBooks;
+  }
+  
+  Future<List<Map<String, dynamic>>> _getStandaloneBooks() async {
+    final allBooks = await _getFilteredBooks();
+    return allBooks.where((book) => book['seriesId'] == null).toList();
+  }
+  
+  Future<void> _downloadBookImage(Map<String, dynamic> book) async {
+    final success = await _imageService.downloadImageToGallery(book['imagePath']);
+    if (!mounted) return;
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(success ? 'Image saved to gallery!' : 'Failed to save image'),
+        backgroundColor: success ? Colors.green : Colors.red,
+      ),
+    );
+  }
+  
+  Future<void> _deleteBook(Map<String, dynamic> book) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Color(0xFF1A1A2E),
+        title: Text('Delete Book', style: TextStyle(color: Colors.white)),
+        content: Text(
+          'Delete "${book['title']}"?',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true) {
+      await File(book['imagePath']).delete();
+      await _db.deleteBook(book['id']);
+      setState(() {});
+    }
+  }
+  
+  void _addNewBook() {
+    // TODO: Navigate to AddEditBookScreen
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => AddEditBookScreen()),
+    ).then((_) => setState(() {}));
+  }
+  
+  Future<void> _editBook(Map<String, dynamic> book) async {
+    // TODO: Navigate to AddEditBookScreen with book data
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => AddEditBookScreen(book: book)),
+    );
+    setState(() {});
+  }
+  
+  Future<void> _manageGenresAndSeries() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const GenreSeriesManagerScreen()),
+    );
+    setState(() {}); // Refresh after returning
+  }
 }
 
-class _GenreManagementDialog extends StatefulWidget {
-  final List<Map<String, dynamic>> genres;
-  final VoidCallback onGenresChanged;
-
-  const _GenreManagementDialog({
-    required this.genres,
-    required this.onGenresChanged,
-  });
-
+// Add/Edit Book Screen
+class AddEditBookScreen extends StatefulWidget {
+  final Map<String, dynamic>? book;
+  
+  const AddEditBookScreen({Key? key, this.book}) : super(key: key);
+  
   @override
-  State<_GenreManagementDialog> createState() => _GenreManagementDialogState();
+  State<AddEditBookScreen> createState() => _AddEditBookScreenState();
 }
 
-class _GenreManagementDialogState extends State<_GenreManagementDialog> {
+class _AddEditBookScreenState extends State<AddEditBookScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _titleController = TextEditingController();
+  final _authorController = TextEditingController();
+  final _totalPagesController = TextEditingController();
+  final _currentPageController = TextEditingController();
+  
+  String? _imagePath;
+  ReadingStatus _readingStatus = ReadingStatus.notRead;
+  Set<int> _selectedGenres = {};
+  int? _selectedSeriesId;
+  int? _seriesNumber;
+  int _totalPages = 0;
+  int _currentPage = 0;
+  
+  List<Map<String, dynamic>> _allGenres = [];
+  List<Map<String, dynamic>> _allSeries = [];
+  
   final _db = DatabaseHelper.instance;
-
-  Future<void> _addGenre() async {
-    final controller = TextEditingController();
+  bool _isLoading = true;
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+  
+  Future<void> _loadData() async {
+    final genres = await _db.getGenres();
+    final series = await _db.getBookSeries();
+    
+    print('Loaded ${genres.length} genres and ${series.length} series');
+    
+    setState(() {
+      _allGenres = genres;
+      _allSeries = series;
+    });
+    
+    if (widget.book != null) {
+      // Editing existing book
+      _titleController.text = widget.book!['title'] ?? '';
+      _authorController.text = widget.book!['author'] ?? '';
+      _imagePath = widget.book!['imagePath'];
+      
+      // Load page numbers
+      _totalPages = widget.book!['totalPages'] ?? 0;
+      _currentPage = widget.book!['currentPage'] ?? 0;
+      _totalPagesController.text = _totalPages > 0 ? _totalPages.toString() : '';
+      _currentPageController.text = _currentPage > 0 ? _currentPage.toString() : '';
+      
+      // Load reading status
+      final status = widget.book!['readingStatus'];
+      if (status == 'read') {
+        _readingStatus = ReadingStatus.read;
+      } else if (status == 'reading') {
+        _readingStatus = ReadingStatus.reading;
+      } else {
+        _readingStatus = ReadingStatus.notRead;
+      }
+      
+      // Load series info
+      _selectedSeriesId = widget.book!['seriesId'];
+      _seriesNumber = widget.book!['seriesNumber'];
+      
+      // Load genres
+      final bookGenres = await _db.getBookGenres(widget.book!['id']);
+      _selectedGenres = bookGenres.map((g) => g['id'] as int).toSet();
+    }
+    
+    setState(() => _isLoading = false);
+  }
+  
+  Future<void> _addNewGenre() async {
+    final nameController = TextEditingController();
+    
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A2E),
-        title: const Text('Add Genre', style: TextStyle(color: Colors.white)),
+        title: const Text('Add New Genre'),
         content: TextField(
-          controller: controller,
-          style: const TextStyle(color: Colors.white),
+          controller: nameController,
           decoration: const InputDecoration(
             labelText: 'Genre Name',
-            labelStyle: TextStyle(color: Colors.white70),
+            border: OutlineInputBorder(),
           ),
+          autofocus: true,
         ),
         actions: [
           TextButton(
@@ -849,63 +755,438 @@ class _GenreManagementDialogState extends State<_GenreManagementDialog> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () async {
-              if (controller.text.isNotEmpty) {
-                await _db.insertGenre({
-                  'name': controller.text,
-                  'createdAt': DateTime.now().toIso8601String(),
-                });
-                if (context.mounted) Navigator.pop(context, true);
-              }
-            },
+            onPressed: () => Navigator.pop(context, true),
             child: const Text('Add'),
           ),
         ],
       ),
     );
-
-    if (result == true) {
-      widget.onGenresChanged();
+    
+    if (result == true && nameController.text.trim().isNotEmpty) {
+      final genreId = await _db.insertGenre({
+        'name': nameController.text.trim(),
+        'createdAt': DateTime.now().toIso8601String(),
+      });
+      // Reload data and refresh UI
+      final genres = await _db.getGenres();
+      print('After adding genre, total genres: ${genres.length}');
+      setState(() {
+        _allGenres = genres;
+        _selectedGenres.add(genreId);
+      });
     }
   }
-
-  Future<void> _deleteGenre(int id) async {
-    await _db.deleteGenre(id);
-    widget.onGenresChanged();
+  
+  Future<void> _addNewSeries() async {
+    final nameController = TextEditingController();
+    final descController = TextEditingController();
+    
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add New Series'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(
+                labelText: 'Series Name',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: descController,
+              decoration: const InputDecoration(
+                labelText: 'Description (optional)',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+    
+    if (result == true && nameController.text.trim().isNotEmpty) {
+      final seriesId = await _db.insertBookSeries({
+        'name': nameController.text.trim(),
+        'description': descController.text.trim(),
+        'createdAt': DateTime.now().toIso8601String(),
+      });
+      // Reload data and refresh UI
+      final series = await _db.getBookSeries();
+      print('After adding series, total series: ${series.length}, selected: $seriesId');
+      setState(() {
+        _allSeries = series;
+        _selectedSeriesId = seriesId;
+      });
+    }
   }
-
+  
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    
+    if (pickedFile != null) {
+      final appDir = await getApplicationDocumentsDirectory();
+      final fileName = 'book_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final savedImage = await File(pickedFile.path).copy('${appDir.path}/$fileName');
+      
+      setState(() {
+        _imagePath = savedImage.path;
+      });
+    }
+  }
+  
+  Future<void> _saveBook() async {
+    if (!_formKey.currentState!.validate()) return;
+    
+    if (_selectedGenres.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select at least one genre')),
+      );
+      return;
+    }
+    
+    final bookData = {
+      'title': _titleController.text,
+      'author': _authorController.text,
+      'imagePath': _imagePath,
+      'readingStatus': _readingStatus == ReadingStatus.read 
+          ? 'read' 
+          : _readingStatus == ReadingStatus.reading 
+              ? 'reading' 
+              : 'not_read',
+      'seriesId': _selectedSeriesId,
+      'seriesNumber': _seriesNumber,
+      'totalPages': _totalPages,
+      'currentPage': _currentPage,
+      'createdAt': DateTime.now().toIso8601String(),
+    };
+    
+    try {
+      int bookId;
+      if (widget.book == null) {
+        // Insert new book
+        bookId = await _db.insertBook(bookData);
+      } else {
+        // Update existing book
+        bookId = widget.book!['id'];
+        await _db.updateBook(bookId, bookData);
+        
+        // Remove old genre associations
+        final oldGenres = await _db.getBookGenres(bookId);
+        for (var genre in oldGenres) {
+          await _db.removeGenreFromBook(bookId, genre['id']);
+        }
+      }
+      
+      // Add genre associations
+      for (var genreId in _selectedGenres) {
+        await _db.addGenreToBook(bookId, genreId);
+      }
+      
+      if (mounted) {
+        Navigator.pop(context, true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(widget.book == null ? 'Book added!' : 'Book updated!')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error saving book: $e')),
+      );
+    }
+  }
+  
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: const Color(0xFF1A1A2E),
-      title: const Text('Manage Genres', style: TextStyle(color: Colors.white)),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: ListView.builder(
-          shrinkWrap: true,
-          itemCount: widget.genres.length,
-          itemBuilder: (context, index) {
-            final genre = widget.genres[index];
-            return ListTile(
-              title: Text(genre['name'], style: const TextStyle(color: Colors.white)),
-              trailing: IconButton(
-                icon: const Icon(Icons.delete, color: Colors.redAccent),
-                onPressed: () => _deleteGenre(genre['id']),
-              ),
-            );
-          },
-        ),
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.book == null ? 'Add Book' : 'Edit Book'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.save),
+            onPressed: _saveBook,
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: _addGenre,
-          child: const Text('Add Genre'),
-        ),
-        ElevatedButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-      ],
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Image picker
+                    Center(
+                      child: GestureDetector(
+                        onTap: _pickImage,
+                        child: Container(
+                          width: 200,
+                          height: 280,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[800],
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.purple, width: 2),
+                          ),
+                          child: _imagePath != null
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Image.file(File(_imagePath!), fit: BoxFit.cover),
+                                )
+                              : Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.add_photo_alternate, size: 64, color: Colors.purple[300]),
+                                    const SizedBox(height: 8),
+                                    Text('Tap to add cover', style: TextStyle(color: Colors.purple[300])),
+                                  ],
+                                ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    
+                    // Title
+                    TextFormField(
+                      controller: _titleController,
+                      decoration: const InputDecoration(
+                        labelText: 'Title *',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (v) => v?.isEmpty == true ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Author
+                    TextFormField(
+                      controller: _authorController,
+                      decoration: const InputDecoration(
+                        labelText: 'Author *',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (v) => v?.isEmpty == true ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 24),
+                    
+                    // Page Numbers
+                    const Text('Page Count', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _totalPagesController,
+                            decoration: const InputDecoration(
+                              labelText: 'Total Pages',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.book),
+                            ),
+                            keyboardType: TextInputType.number,
+                            onChanged: (v) {
+                              _totalPages = int.tryParse(v) ?? 0;
+                              setState(() {});
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _currentPageController,
+                            decoration: InputDecoration(
+                              labelText: _readingStatus == ReadingStatus.reading ? 'Current Page' : 'Pages Read',
+                              border: const OutlineInputBorder(),
+                              prefixIcon: const Icon(Icons.bookmark),
+                              enabled: _readingStatus == ReadingStatus.reading || _readingStatus == ReadingStatus.read,
+                            ),
+                            keyboardType: TextInputType.number,
+                            onChanged: (v) {
+                              _currentPage = int.tryParse(v) ?? 0;
+                              setState(() {});
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_totalPages > 0 && _currentPage > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: LinearProgressIndicator(
+                          value: _currentPage / _totalPages,
+                          minHeight: 8,
+                          backgroundColor: Colors.grey[800],
+                          valueColor: AlwaysStoppedAnimation(
+                            _readingStatus == ReadingStatus.read ? Colors.green : Colors.blue,
+                          ),
+                        ),
+                      ),
+                    if (_totalPages > 0 && _currentPage > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          '${(_currentPage / _totalPages * 100).toStringAsFixed(1)}% • ${_totalPages - _currentPage} pages remaining',
+                          style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                        ),
+                      ),
+                    const SizedBox(height: 24),
+                    
+                    // Reading Status
+                    const Text('Reading Status', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('✓ Read'),
+                          selected: _readingStatus == ReadingStatus.read,
+                          onSelected: (s) => setState(() => _readingStatus = ReadingStatus.read),
+                        ),
+                        ChoiceChip(
+                          label: const Text('📖 Reading'),
+                          selected: _readingStatus == ReadingStatus.reading,
+                          onSelected: (s) => setState(() => _readingStatus = ReadingStatus.reading),
+                        ),
+                        ChoiceChip(
+                          label: const Text('○ Not Read'),
+                          selected: _readingStatus == ReadingStatus.notRead,
+                          onSelected: (s) => setState(() => _readingStatus = ReadingStatus.notRead),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    
+                    // Genres (multi-select)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Genres * (tap multiple)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        TextButton.icon(
+                          onPressed: _addNewGenre,
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Add New'),
+                          style: TextButton.styleFrom(foregroundColor: Colors.purpleAccent),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _allGenres.isEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Text(
+                              'No genres yet. Click "Add New" to create one.',
+                              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                            ),
+                          )
+                        : Wrap(
+                            spacing: 8,
+                            children: _allGenres.map((genre) {
+                              final isSelected = _selectedGenres.contains(genre['id']);
+                              return FilterChip(
+                                label: Text(genre['name']),
+                                selected: isSelected,
+                                onSelected: (selected) {
+                                  setState(() {
+                                    if (selected) {
+                                      _selectedGenres.add(genre['id']);
+                                    } else {
+                                      _selectedGenres.remove(genre['id']);
+                                    }
+                                  });
+                                },
+                              );
+                            }).toList(),
+                          ),
+                    const SizedBox(height: 24),
+                    
+                    // Series
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Series (Optional)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        TextButton.icon(
+                          onPressed: _addNewSeries,
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Add New'),
+                          style: TextButton.styleFrom(foregroundColor: Colors.purpleAccent),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<int>(
+                      value: _selectedSeriesId,
+                      decoration: const InputDecoration(
+                        labelText: 'Select Series',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        const DropdownMenuItem(value: null, child: Text('None')),
+                        ..._allSeries.map((series) => DropdownMenuItem(
+                          value: series['id'],
+                          child: Text(series['name']),
+                        )),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedSeriesId = value;
+                          if (value == null) _seriesNumber = null;
+                        });
+                      },
+                    ),
+                    
+                    if (_selectedSeriesId != null) ...[
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        initialValue: _seriesNumber?.toString(),
+                        decoration: const InputDecoration(
+                          labelText: 'Book # in Series',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.number,
+                        onChanged: (v) => _seriesNumber = int.tryParse(v),
+                      ),
+                    ],
+                    
+                    const SizedBox(height: 32),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _saveBook,
+                        icon: const Icon(Icons.save),
+                        label: Text(widget.book == null ? 'Add Book' : 'Update Book'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.all(16),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
     );
+  }
+  
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _authorController.dispose();
+    _totalPagesController.dispose();
+    _currentPageController.dispose();
+    super.dispose();
   }
 }

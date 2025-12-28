@@ -11,7 +11,8 @@ class HomeDashboardScreen extends StatefulWidget {
 }
 
 class _HomeDashboardScreenState extends State<HomeDashboardScreen> with TickerProviderStateMixin {
-  Map<String, int> _stats = {};
+  Map<String, dynamic> _stats = {};
+  Map<String, dynamic> _readingStats = {};
   bool _isLoading = true;
   late AnimationController _pulseController;
   late AnimationController _rotateController;
@@ -45,8 +46,10 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with TickerPr
     try {
       final db = DatabaseHelper.instance;
       
+      // Get reading statistics
+      _readingStats = await db.getReadingStatistics();
+      
       final books = await db.getBooksByGenre(null);
-      final readBooks = books.where((b) => b['isRead'] == 1).length;
       
       final objects = await db.getCelestialObjectsByClassification(null);
       final observedObjects = objects.where((o) => o['isObserved'] == 1).length;
@@ -63,8 +66,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with TickerPr
       if (mounted) {
         setState(() {
           _stats = {
-            'booksRead': readBooks,
-            'booksTotal': books.length,
+            'booksRead': _readingStats['booksRead'],
+            'booksTotal': _readingStats['totalBooks'],
             'objectsObserved': observedObjects,
             'objectsTotal': objects.length,
             'projectsDone': doneProjects,
@@ -87,6 +90,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with TickerPr
             'papersRead': 0, 'papersTotal': 0,
             'albumsTotal': 0, 'imagesTotal': 0,
           };
+          _readingStats = {};
           _isLoading = false;
         });
       }
@@ -236,11 +240,160 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with TickerPr
                         ),
                       ),
                       
+                      // Reading Statistics
+                      if (_readingStats.isNotEmpty) ...[
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+                            child: Text(
+                              '📚 Reading Statistics',
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white.withOpacity(0.9),
+                              ),
+                            ),
+                          ),
+                        ),
+                        
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: GlassContainer(
+                              child: Padding(
+                                padding: const EdgeInsets.all(20),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Books breakdown
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                      children: [
+                                        _StatPill(
+                                          label: 'Read',
+                                          value: '${_readingStats['booksRead']}',
+                                          icon: '✓',
+                                          color: Colors.green,
+                                        ),
+                                        _StatPill(
+                                          label: 'Reading',
+                                          value: '${_readingStats['booksReading']}',
+                                          icon: '📖',
+                                          color: Colors.blue,
+                                        ),
+                                        _StatPill(
+                                          label: 'To Read',
+                                          value: '${_readingStats['booksNotRead']}',
+                                          icon: '○',
+                                          color: Colors.grey,
+                                        ),
+                                      ],
+                                    ),
+                                    
+                                    if (_readingStats['totalPages'] > 0) ...[
+                                      const Divider(height: 32),
+                                      
+                                      // Overall progress bar
+                                      Text(
+                                        'Overall Reading Progress',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white.withOpacity(0.8),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: LinearProgressIndicator(
+                                          value: _readingStats['overallProgress'] / 100,
+                                          minHeight: 12,
+                                          backgroundColor: Colors.grey[800],
+                                          valueColor: const AlwaysStoppedAnimation(Colors.purpleAccent),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            '${_readingStats['overallProgress'].toStringAsFixed(1)}% Complete',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.purpleAccent.withOpacity(0.8),
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          Text(
+                                            '${_readingStats['totalPagesCompleted']} / ${_readingStats['totalPages']} pages',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.white.withOpacity(0.6),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      
+                                      const SizedBox(height: 16),
+                                      
+                                      // Stats grid
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: _StatsBox(
+                                              label: 'Pages Read',
+                                              value: '${_readingStats['pagesRead']}',
+                                              color: Colors.green,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: _StatsBox(
+                                              label: 'Currently Reading',
+                                              value: '${_readingStats['currentlyReadingPages']}',
+                                              subtitle: 'of ${_readingStats['currentlyReadingTotalPages']}',
+                                              color: Colors.blue,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: _StatsBox(
+                                              label: 'Remaining',
+                                              value: '${_readingStats['pagesRemaining']}',
+                                              subtitle: 'pages to go',
+                                              color: Colors.orange,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: _StatsBox(
+                                              label: 'Read Rate',
+                                              value: '${_readingStats['readPercentage'].toStringAsFixed(0)}%',
+                                              subtitle: 'of collection',
+                                              color: Colors.purple,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      
                       // Stats Cards
                       SliverPadding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
                         sliver: SliverList(
                           delegate: SliverChildListDelegate([
+                            const SizedBox(height: 24),
                             CosmicStatCard(
                               title: 'Book Library',
                               icon: Icons.menu_book,
@@ -730,4 +883,114 @@ class StarfieldPainter extends CustomPainter {
   @override
   bool shouldRepaint(StarfieldPainter oldDelegate) =>
       animationValue != oldDelegate.animationValue;
+}
+
+// Helper widget for stat pills
+class _StatPill extends StatelessWidget {
+  final String label;
+  final String value;
+  final String icon;
+  final Color color;
+  
+  const _StatPill({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+  
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: color.withOpacity(0.5)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(icon, style: const TextStyle(fontSize: 16)),
+              const SizedBox(width: 6),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.white.withOpacity(0.6),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// Helper widget for stats boxes
+class _StatsBox extends StatelessWidget {
+  final String label;
+  final String value;
+  final String? subtitle;
+  final Color color;
+  
+  const _StatsBox({
+    required this.label,
+    required this.value,
+    this.subtitle,
+    required this.color,
+  });
+  
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.white.withOpacity(0.6),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          if (subtitle != null)
+            Text(
+              subtitle!,
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.white.withOpacity(0.5),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
