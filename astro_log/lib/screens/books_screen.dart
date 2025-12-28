@@ -309,6 +309,7 @@ class _BooksScreenState extends State<BooksScreen> {
                 seriesName,
               ),
               seriesId: isStandalone ? null : seriesId,
+              categoryType: isStandalone ? null : 'series',
             );
           },
         );
@@ -353,6 +354,7 @@ class _BooksScreenState extends State<BooksScreen> {
               color: Colors.tealAccent,
               onTap: () => _navigateToCategoryBooks('author', null, author),
               bookCount: booksByAuthor[author]!.length,
+              categoryType: 'author',
             );
           },
         );
@@ -368,77 +370,220 @@ class _BooksScreenState extends State<BooksScreen> {
     int? genreId,
     int? seriesId,
     int? bookCount,
+    String? categoryType,
   }) {
-    return FutureBuilder<int>(
-      future: bookCount != null 
-          ? Future.value(bookCount)
-          : genreId != null
-              ? _getBooksByGenreFiltered(genreId).then((books) => books.length)
-              : seriesId != null
-                  ? _getBooksBySeriesFiltered(seriesId).then((books) => books.length)
-                  : _getStandaloneBooks().then((books) => books.length),
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _getCategoryCardData(categoryType, seriesId, name, genreId, bookCount),
       builder: (context, snapshot) {
-        final count = snapshot.data ?? 0;
+        final count = snapshot.data?['count'] ?? 0;
+        final coverImage = snapshot.data?['coverImage'] as String?;
+        final showMenu = (categoryType == 'series' && seriesId != null) || categoryType == 'author';
         
         return GestureDetector(
           onTap: onTap,
           child: Container(
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [color.withOpacity(0.3), color.withOpacity(0.1)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+              gradient: coverImage == null || !File(coverImage).existsSync()
+                  ? LinearGradient(
+                      colors: [color.withOpacity(0.3), color.withOpacity(0.1)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    )
+                  : null,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: color.withOpacity(0.5), width: 1),
+              image: coverImage != null && File(coverImage).existsSync()
+                  ? DecorationImage(
+                      image: FileImage(File(coverImage)),
+                      fit: BoxFit.cover,
+                    )
+                  : null,
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(icon, size: 48, color: color),
-                      SizedBox(height: 12),
-                      Text(
-                        name,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+              child: Stack(
+                children: [
+                  // Gradient overlay for text readability (only when image exists)
+                  if (coverImage != null && File(coverImage).existsSync())
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withOpacity(0.7),
+                          ],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          stops: [0.3, 1.0],
                         ),
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                      SizedBox(height: 8),
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: color.withOpacity(0.2),
+                    ),
+                  // Content
+                  Positioned(
+                    left: 12,
+                    right: 12,
+                    bottom: 12,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (coverImage == null || !File(coverImage).existsSync())
+                          ...[
+                            Icon(icon, size: 48, color: color),
+                            SizedBox(height: 8),
+                          ],
+                        // Text container with glassmorphism
+                        ClipRRect(
                           borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          '$count ${count == 1 ? 'book' : 'books'}',
-                          style: TextStyle(
-                            color: color,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                            child: Container(
+                              padding: EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.3),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.2),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    name,
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                      shadows: [
+                                        Shadow(
+                                          color: Colors.black.withOpacity(0.8),
+                                          blurRadius: 8,
+                                          offset: Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    textAlign: TextAlign.center,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  SizedBox(height: 6),
+                                  Container(
+                                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: color.withOpacity(0.9),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      '$count ${count == 1 ? 'book' : 'books'}',
+                                      style: TextStyle(
+                                        color: Colors.black,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
+                  // Menu button
+                  if (showMenu)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: PopupMenuButton<String>(
+                          icon: Icon(Icons.more_vert, color: Colors.white, size: 20),
+                          color: Color(0xFF1A1A2E),
+                          onSelected: (value) {
+                            if (value == 'edit') {
+                              _editCategory(categoryType!, seriesId, name);
+                            } else if (value == 'delete') {
+                              _deleteCategory(categoryType!, seriesId, name);
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            PopupMenuItem(
+                              value: 'edit',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.edit, color: Colors.cyanAccent, size: 20),
+                                  SizedBox(width: 12),
+                                  Text('Edit', style: TextStyle(color: Colors.white)),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'delete',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.delete, color: Colors.redAccent, size: 20),
+                                  SizedBox(width: 12),
+                                  Text('Delete', style: TextStyle(color: Colors.white)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
         );
       },
     );
+  }
+  
+  Future<Map<String, dynamic>> _getCategoryCardData(
+    String? categoryType,
+    int? seriesId,
+    String name,
+    int? genreId,
+    int? bookCount,
+  ) async {
+    int count = 0;
+    String? coverImage;
+    
+    // Get book count
+    if (bookCount != null) {
+      count = bookCount;
+    } else if (genreId != null) {
+      count = (await _getBooksByGenreFiltered(genreId)).length;
+    } else if (seriesId != null) {
+      count = (await _getBooksBySeriesFiltered(seriesId)).length;
+    } else {
+      count = (await _getStandaloneBooks()).length;
+    }
+    
+    // Get cover image
+    if (categoryType == 'series' && seriesId != null) {
+      final allSeries = await _db.getBookSeries();
+      final series = allSeries.firstWhere(
+        (s) => s['id'] == seriesId,
+        orElse: () => <String, dynamic>{},
+      );
+      coverImage = series['coverImagePath'] as String?;
+    } else if (categoryType == 'author') {
+      final authors = await _db.getAuthors();
+      final author = authors.firstWhere(
+        (a) => a['name'] == name,
+        orElse: () => <String, dynamic>{},
+      );
+      coverImage = author['coverImagePath'] as String?;
+    }
+    
+    return {'count': count, 'coverImage': coverImage};
   }
   
   void _navigateToCategoryBooks(String type, int? id, String name) {
@@ -951,6 +1096,78 @@ class _BooksScreenState extends State<BooksScreen> {
       await _db.deleteBook(book['id']);
       setState(() {});
     }
+  }
+  
+  Future<void> _deleteCategory(String categoryType, int? seriesId, String name) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Color(0xFF1A1A2E),
+        title: Text('Delete ${categoryType == 'series' ? 'Series' : 'Author'}', 
+                   style: TextStyle(color: Colors.white)),
+        content: Text(
+          categoryType == 'series'
+            ? 'Delete series "$name"? All books will be moved to standalone.'
+            : 'Delete all books by "$name"? This cannot be undone.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true) {
+      if (categoryType == 'series' && seriesId != null) {
+        // Remove series from all books (set seriesId and seriesNumber to null)
+        final books = await _db.getBooksBySeries(seriesId);
+        for (var book in books) {
+          await _db.updateBook(book['id'], {
+            ...book,
+            'seriesId': null,
+            'seriesNumber': null,
+          });
+        }
+        // Delete the series itself
+        await _db.deleteBookSeries(seriesId);
+      } else if (categoryType == 'author') {
+        // Delete all books by this author
+        final allBooks = await _db.getAllBooks();
+        final authorBooks = allBooks.where((b) => b['author'] == name).toList();
+        for (var book in authorBooks) {
+          if (book['imagePath'] != null) {
+            try {
+              await File(book['imagePath']).delete();
+            } catch (e) {
+              // Image might not exist
+            }
+          }
+          await _db.deleteBook(book['id']);
+        }
+      }
+      setState(() {});
+    }
+  }
+  
+  void _editCategory(String categoryType, int? seriesId, String name) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditCategoryScreen(
+          categoryType: categoryType,
+          seriesId: seriesId,
+          categoryName: name,
+        ),
+      ),
+    ).then((_) => setState(() {}));
   }
   
   void _addNewBook() {
@@ -2016,5 +2233,379 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     } catch (e) {
       return 'Unknown';
     }
+  }
+}
+
+// Edit Category Screen (for Series and Authors)
+class EditCategoryScreen extends StatefulWidget {
+  final String categoryType; // 'series' or 'author'
+  final int? seriesId;
+  final String categoryName;
+
+  const EditCategoryScreen({
+    Key? key,
+    required this.categoryType,
+    this.seriesId,
+    required this.categoryName,
+  }) : super(key: key);
+
+  @override
+  State<EditCategoryScreen> createState() => _EditCategoryScreenState();
+}
+
+class _EditCategoryScreenState extends State<EditCategoryScreen> {
+  final DatabaseHelper _db = DatabaseHelper.instance;
+  final ImageService _imageService = ImageService.instance;
+  List<Map<String, dynamic>> _categoryBooks = [];
+  List<Map<String, dynamic>> _availableBooks = [];
+  String? _coverImagePath;
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadBooks();
+    _loadCoverImage();
+  }
+
+  Future<void> _loadCoverImage() async {
+    if (widget.categoryType == 'series') {
+      final allSeries = await _db.getBookSeries();
+      final series = allSeries.firstWhere(
+        (s) => s['id'] == widget.seriesId,
+        orElse: () => <String, dynamic>{},
+      );
+      if (series.isNotEmpty && series['coverImagePath'] != null) {
+        setState(() {
+          _coverImagePath = series['coverImagePath'];
+        });
+      }
+    } else {
+      final authors = await _db.getAuthors();
+      final author = authors.firstWhere(
+        (a) => a['name'] == widget.categoryName,
+        orElse: () => <String, dynamic>{},
+      );
+      if (author.isNotEmpty && author['coverImagePath'] != null) {
+        setState(() {
+          _coverImagePath = author['coverImagePath'];
+        });
+      }
+    }
+  }
+
+  Future<void> _loadBooks() async {
+    if (widget.categoryType == 'series') {
+      _categoryBooks = List.from(await _db.getBooksBySeries(widget.seriesId!));
+    } else {
+      final allBooks = await _db.getAllBooks();
+      _categoryBooks = allBooks.where((b) => b['author'] == widget.categoryName).toList();
+    }
+    
+    // Load available books (books that aren't in this category)
+    final allBooks = await _db.getAllBooks();
+    if (widget.categoryType == 'series') {
+      _availableBooks = allBooks.where((b) => b['seriesId'] != widget.seriesId).toList();
+    } else {
+      _availableBooks = allBooks.where((b) => b['author'] != widget.categoryName).toList();
+    }
+    
+    setState(() {});
+  }
+
+  Future<void> _pickCoverImage() async {
+    final picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+    
+    if (image != null) {
+      // Copy to permanent storage
+      final appDir = await getApplicationDocumentsDirectory();
+      final fileName = 'cover_${widget.categoryType}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final savedImage = await File(image.path).copy('${appDir.path}/$fileName');
+      
+      setState(() {
+        _coverImagePath = savedImage.path;
+      });
+    }
+  }
+
+  Future<void> _saveCoverImage() async {
+    if (_coverImagePath == null) return;
+    
+    if (widget.categoryType == 'series') {
+      // Save to book_series table
+      await _db.updateBookSeries(widget.seriesId!, {
+        'name': widget.categoryName,
+        'coverImagePath': _coverImagePath,
+      });
+    } else {
+      // For authors, save to authors table
+      final authors = await _db.getAuthors();
+      final existingAuthor = authors.firstWhere(
+        (a) => a['name'] == widget.categoryName,
+        orElse: () => <String, dynamic>{},
+      );
+      
+      if (existingAuthor.isNotEmpty) {
+        await _db.updateAuthor(existingAuthor['id'], {
+          'name': widget.categoryName,
+          'coverImagePath': _coverImagePath,
+        });
+      } else {
+        // Create new author entry
+        await _db.insertAuthor({
+          'name': widget.categoryName,
+          'coverImagePath': _coverImagePath,
+          'createdAt': DateTime.now().toIso8601String(),
+        });
+      }
+    }
+    
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Cover image saved!'),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
+  Future<void> _removeBookFromCategory(Map<String, dynamic> book) async {
+    if (widget.categoryType == 'series') {
+      await _db.updateBook(book['id'], {
+        ...book,
+        'seriesId': null,
+        'seriesNumber': null,
+      });
+    } else {
+      // For authors, we can't remove without deleting - show message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Cannot remove author. Edit the book to change author.'),
+          backgroundColor: Colors.orangeAccent,
+        ),
+      );
+      return;
+    }
+    await _loadBooks();
+  }
+
+  Future<void> _addBookToCategory() async {
+    final selected = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Color(0xFF1A1A2E),
+        title: Text('Add Book', style: TextStyle(color: Colors.white)),
+        content: Container(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: _availableBooks.length,
+            itemBuilder: (context, index) {
+              final book = _availableBooks[index];
+              return ListTile(
+                title: Text(book['title'], style: TextStyle(color: Colors.white)),
+                subtitle: Text(book['author'] ?? 'Unknown', style: TextStyle(color: Colors.white70)),
+                onTap: () => Navigator.pop(context, book),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+
+    if (selected != null) {
+      if (widget.categoryType == 'series') {
+        // Find the highest series number and add 1
+        int maxNumber = 0;
+        for (var book in _categoryBooks) {
+          final num = book['seriesNumber'] as int? ?? 0;
+          if (num > maxNumber) maxNumber = num;
+        }
+        
+        await _db.updateBook(selected['id'], {
+          ...selected,
+          'seriesId': widget.seriesId,
+          'seriesNumber': maxNumber + 1,
+        });
+      } else {
+        await _db.updateBook(selected['id'], {
+          ...selected,
+          'author': widget.categoryName,
+        });
+      }
+      await _loadBooks();
+    }
+  }
+
+  Future<void> _editSeriesNumber(Map<String, dynamic> book) async {
+    final controller = TextEditingController(text: (book['seriesNumber'] ?? '').toString());
+    
+    final newNumber = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Color(0xFF1A1A2E),
+        title: Text('Edit Series Number', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          style: TextStyle(color: Colors.white),
+          decoration: InputDecoration(
+            labelText: 'Series Number',
+            labelStyle: TextStyle(color: Colors.white70),
+            enabledBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: Colors.cyanAccent),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: Colors.cyanAccent),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final num = int.tryParse(controller.text);
+              Navigator.pop(context, num);
+            },
+            child: Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (newNumber != null) {
+      await _db.updateBook(book['id'], {
+        ...book,
+        'seriesNumber': newNumber,
+      });
+      await _loadBooks();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.categoryType == 'series' ? Colors.cyanAccent : Colors.tealAccent;
+    
+    return Scaffold(
+      backgroundColor: Color(0xFF0F0E17),
+      appBar: AppBar(
+        title: Text('Edit ${widget.categoryName}'),
+        backgroundColor: Color(0xFF1A1A2E),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.add_photo_alternate),
+            onPressed: _pickCoverImage,
+            tooltip: 'Add Cover Image',
+          ),
+          IconButton(
+            icon: Icon(Icons.add),
+            onPressed: _addBookToCategory,
+            tooltip: 'Add Book',
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          if (_coverImagePath != null)
+            Stack(
+              children: [
+                Container(
+                  height: 200,
+                  width: double.infinity,
+                  margin: EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    image: DecorationImage(
+                      image: FileImage(File(_coverImagePath!)),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: 24,
+                  right: 24,
+                  child: ElevatedButton.icon(
+                    onPressed: _saveCoverImage,
+                    icon: Icon(Icons.save),
+                    label: Text('Save Cover'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: color,
+                      foregroundColor: Colors.black,
+                      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          Padding(
+            padding: EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Icon(Icons.book, color: color),
+                SizedBox(width: 8),
+                Text(
+                  '${_categoryBooks.length} books',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: _categoryBooks.length,
+              itemBuilder: (context, index) {
+                final book = _categoryBooks[index];
+                return Card(
+                  color: Color(0xFF1A1A2E),
+                  margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: ListTile(
+                    leading: book['imagePath'] != null
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.file(
+                              File(book['imagePath']),
+                              width: 50,
+                              height: 70,
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        : Icon(Icons.book, color: color),
+                    title: Text(book['title'], style: TextStyle(color: Colors.white)),
+                    subtitle: widget.categoryType == 'series'
+                        ? Text('Book #${book['seriesNumber'] ?? '?'}', 
+                               style: TextStyle(color: Colors.white70))
+                        : Text(book['author'] ?? 'Unknown', 
+                               style: TextStyle(color: Colors.white70)),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (widget.categoryType == 'series')
+                          IconButton(
+                            icon: Icon(Icons.edit, color: Colors.cyanAccent, size: 20),
+                            onPressed: () => _editSeriesNumber(book),
+                          ),
+                        IconButton(
+                          icon: Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 20),
+                          onPressed: () => _removeBookFromCategory(book),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

@@ -21,7 +21,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 8,
+      version: 9,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -262,6 +262,21 @@ class DatabaseHelper {
             // Skip if author already exists
           }
         }
+      }
+    }
+    
+    if (oldVersion < 9) {
+      // Add coverImagePath to book_series and authors tables
+      try {
+        await db.execute('ALTER TABLE book_series ADD COLUMN coverImagePath TEXT');
+      } catch (e) {
+        // Column might already exist
+      }
+      
+      try {
+        await db.execute('ALTER TABLE authors ADD COLUMN coverImagePath TEXT');
+      } catch (e) {
+        // Column might already exist
       }
     }
   }
