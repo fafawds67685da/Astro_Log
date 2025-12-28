@@ -49,7 +49,7 @@ class _CategoryBooksScreenState extends State<CategoryBooksScreen> {
         
       case 'series':
         if (widget.statusFilters.contains(ReadingStatus.all)) {
-          books = await _db.getBooksBySeries(widget.categoryId!);
+          books = List.from(await _db.getBooksBySeries(widget.categoryId!));
         } else {
           if (widget.statusFilters.contains(ReadingStatus.read)) {
             books.addAll(await _db.getBooksBySeries(widget.categoryId!, readingStatus: 'read'));
@@ -99,10 +99,39 @@ class _CategoryBooksScreenState extends State<CategoryBooksScreen> {
           }
         }
         books = allBooks.where((book) => (book['author'] ?? 'Unknown') == widget.categoryName).toList();
+        // Sort by series and series number
+        books.sort((a, b) {
+          final aSeriesId = a['seriesId'];
+          final bSeriesId = b['seriesId'];
+          final aSeriesNum = a['seriesNumber'] ?? 9999;
+          final bSeriesNum = b['seriesNumber'] ?? 9999;
+          
+          // Books without series come last
+          if (aSeriesId == null && bSeriesId == null) return 0;
+          if (aSeriesId == null) return 1;
+          if (bSeriesId == null) return -1;
+          
+          // Same series: sort by number
+          if (aSeriesId == bSeriesId) {
+            return aSeriesNum.compareTo(bSeriesNum);
+          }
+          
+          // Different series: sort by series ID
+          return aSeriesId.compareTo(bSeriesId);
+        });
         break;
     }
     
     return books;
+  }
+
+  Future<String> _getSeriesName(int seriesId) async {
+    final allSeries = await _db.getBookSeries();
+    final series = allSeries.firstWhere(
+      (s) => s['id'] == seriesId,
+      orElse: () => {'name': 'Series'},
+    );
+    return series['name'] ?? 'Series';
   }
 
   @override
@@ -287,7 +316,41 @@ class _CategoryBooksScreenState extends State<CategoryBooksScreen> {
                       ),
                     ),
                     // Series number badge
-                    if (seriesNumber != null)
+                    if (widget.categoryType == 'author' && book['seriesId'] != null)
+                      Positioned(
+                        top: 8,
+                        left: 8,
+                        child: FutureBuilder<String>(
+                          future: _getSeriesName(book['seriesId']),
+                          builder: (context, seriesSnapshot) {
+                            if (!seriesSnapshot.hasData) return SizedBox.shrink();
+                            return Container(
+                              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.purpleAccent.withOpacity(0.9),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.white.withOpacity(0.3)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.collections_bookmark, size: 12, color: Colors.white),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    '${seriesSnapshot.data}${seriesNumber != null ? " #$seriesNumber" : ""}',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      )
+                    else if (seriesNumber != null)
                       Positioned(
                         top: 8,
                         left: 8,
@@ -342,11 +405,13 @@ class _CategoryBooksScreenState extends State<CategoryBooksScreen> {
               ),
               Expanded(
                 flex: 2,
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                child: ClipRect(
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                       Text(
                         book['title'] ?? 'Untitled',
                         style: TextStyle(
@@ -357,7 +422,7 @@ class _CategoryBooksScreenState extends State<CategoryBooksScreen> {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      SizedBox(height: 4),
+                      SizedBox(height: 3),
                       Text(
                         book['author'] ?? 'Unknown Author',
                         style: TextStyle(
@@ -367,38 +432,69 @@ class _CategoryBooksScreenState extends State<CategoryBooksScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      Spacer(),
+                      SizedBox(height: 4),
                       if (book['totalPages'] != null && book['totalPages'] > 0) ...[
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Page ${book['currentPage'] ?? 0} / ${book['totalPages']}',
-                                  style: TextStyle(color: accentColor, fontSize: 10, fontWeight: FontWeight.w500),
+                        (readingStatus == 'read')
+                            ? Center(
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: Colors.greenAccent.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.greenAccent, width: 1),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.check_circle, color: Colors.greenAccent, size: 11),
+                                      SizedBox(width: 3),
+                                      Text(
+                                        'Completed!',
+                                        style: TextStyle(
+                                          color: Colors.greenAccent,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                Text(
-                                  '${((book['currentPage'] ?? 0) / book['totalPages'] * 100).toStringAsFixed(0)}%',
-                                  style: TextStyle(color: accentColor, fontSize: 10, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: 4),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(3),
-                              child: LinearProgressIndicator(
-                                value: (book['currentPage'] ?? 0) / book['totalPages'],
-                                backgroundColor: Colors.white.withOpacity(0.1),
-                                valueColor: AlwaysStoppedAnimation<Color>(statusColor),
-                                minHeight: 4,
+                              )
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          'Page ${book['currentPage'] ?? 0} / ${book['totalPages']}',
+                                          style: TextStyle(color: accentColor, fontSize: 9, fontWeight: FontWeight.w500),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${((book['currentPage'] ?? 0) / book['totalPages'] * 100).toStringAsFixed(0)}%',
+                                        style: TextStyle(color: accentColor, fontSize: 9, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                  SizedBox(height: 3),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(3),
+                                    child: LinearProgressIndicator(
+                                      value: (book['currentPage'] ?? 0) / book['totalPages'],
+                                      backgroundColor: Colors.white.withOpacity(0.1),
+                                      valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                                      minHeight: 4,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                          ],
-                        ),
                       ],
                     ],
+                    ),
                   ),
                 ),
               ),

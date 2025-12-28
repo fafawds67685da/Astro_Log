@@ -224,11 +224,11 @@ class DatabaseHelper {
       await db.execute('ALTER TABLE books ADD COLUMN seriesNumber INTEGER');
       
       // Change isRead to readingStatus
-      await db.execute('ALTER TABLE books ADD COLUMN readingStatus TEXT DEFAULT "not_read"');
+      await db.execute('ALTER TABLE books ADD COLUMN readingStatus TEXT DEFAULT ''not_read''');
       
       // Migrate isRead values to readingStatus
-      await db.execute('UPDATE books SET readingStatus = "read" WHERE isRead = 1');
-      await db.execute('UPDATE books SET readingStatus = "not_read" WHERE isRead = 0 OR isRead IS NULL');
+      await db.execute('UPDATE books SET readingStatus = ''read'' WHERE isRead = 1');
+      await db.execute('UPDATE books SET readingStatus = ''not_read'' WHERE isRead = 0 OR isRead IS NULL');
       
       // Note: Cannot drop genreId and isRead columns in SQLite, but we won't use them anymore
     }
@@ -779,12 +779,13 @@ class DatabaseHelper {
     String where = '';
     List<dynamic> whereArgs = [];
     
-    if (seriesId != null && readingStatus != null) {
-      where = 'seriesId = ? AND readingStatus = ?';
-      whereArgs = [seriesId, readingStatus];
-    } else if (seriesId != null) {
+    if (seriesId != null) {
       where = 'seriesId = ?';
       whereArgs = [seriesId];
+      if (readingStatus != null) {
+        where += ' AND readingStatus = ?';
+        whereArgs.add(readingStatus);
+      }
     } else if (readingStatus != null) {
       where = 'readingStatus = ?';
       whereArgs = [readingStatus];
@@ -928,9 +929,9 @@ class DatabaseHelper {
     final pageStats = await db.rawQuery('''
       SELECT 
         SUM(totalPages) as totalPages,
-        SUM(CASE WHEN readingStatus = "read" THEN totalPages ELSE 0 END) as pagesRead,
-        SUM(CASE WHEN readingStatus = "reading" THEN currentPage ELSE 0 END) as currentlyReadingPages,
-        SUM(CASE WHEN readingStatus = "reading" THEN totalPages ELSE 0 END) as currentlyReadingTotalPages
+        SUM(CASE WHEN readingStatus = 'read' THEN totalPages ELSE 0 END) as pagesRead,
+        SUM(CASE WHEN readingStatus = 'reading' THEN currentPage ELSE 0 END) as currentlyReadingPages,
+        SUM(CASE WHEN readingStatus = 'reading' THEN totalPages ELSE 0 END) as currentlyReadingTotalPages
       FROM books
       WHERE totalPages > 0
     ''');

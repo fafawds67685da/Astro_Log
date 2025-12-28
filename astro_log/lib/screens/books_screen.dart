@@ -671,34 +671,60 @@ class _BooksScreenState extends State<BooksScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Page ${book['currentPage'] ?? 0} of ${book['totalPages']}',
-                              style: TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.w500),
+                    child: (book['readingStatus'] == 'read')
+                        ? Center(
+                            child: Container(
+                              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.greenAccent.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.greenAccent, width: 1.5),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.check_circle, color: Colors.greenAccent, size: 16),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Completed!',
+                                    style: TextStyle(
+                                      color: Colors.greenAccent,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            Text(
-                              '${((book['currentPage'] ?? 0) / book['totalPages'] * 100).toStringAsFixed(0)}%',
-                              style: TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 4),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                            value: (book['currentPage'] ?? 0) / book['totalPages'],
-                            backgroundColor: Colors.white.withOpacity(0.1),
-                            valueColor: AlwaysStoppedAnimation<Color>(statusColor),
-                            minHeight: 6,
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Page ${book['currentPage'] ?? 0} of ${book['totalPages']}',
+                                    style: TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.w500),
+                                  ),
+                                  Text(
+                                    '${((book['currentPage'] ?? 0) / book['totalPages'] * 100).toStringAsFixed(0)}%',
+                                    style: TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: 4),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value: (book['currentPage'] ?? 0) / book['totalPages'],
+                                  backgroundColor: Colors.white.withOpacity(0.1),
+                                  valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                                  minHeight: 6,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
-                    ),
                   ),
                 ],
               ),
@@ -1765,50 +1791,79 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                                 width: 1,
                               ),
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      'Reading Progress',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                            child: status == 'read'
+                                ? Center(
+                                    child: Column(
+                                      children: [
+                                        Icon(
+                                          Icons.check_circle_outline,
+                                          color: Colors.greenAccent,
+                                          size: 48,
+                                        ),
+                                        SizedBox(height: 12),
+                                        Text(
+                                          'Completed!',
+                                          style: TextStyle(
+                                            color: Colors.greenAccent,
+                                            fontSize: 24,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        SizedBox(height: 8),
+                                        Text(
+                                          '$totalPages pages',
+                                          style: TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    Text(
-                                      '$progress%',
-                                      style: TextStyle(
-                                        color: statusColor,
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
+                                  )
+                                : Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            'Reading Progress',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          Text(
+                                            '$progress%',
+                                            style: TextStyle(
+                                              color: statusColor,
+                                              fontSize: 20,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(height: 12),
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: LinearProgressIndicator(
-                                    value: currentPage / totalPages,
-                                    backgroundColor: Colors.white.withOpacity(0.1),
-                                    valueColor: AlwaysStoppedAnimation<Color>(statusColor),
-                                    minHeight: 10,
+                                      SizedBox(height: 12),
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: LinearProgressIndicator(
+                                          value: currentPage / totalPages,
+                                          backgroundColor: Colors.white.withOpacity(0.1),
+                                          valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                                          minHeight: 10,
+                                        ),
+                                      ),
+                                      SizedBox(height: 8),
+                                      Text(
+                                        'Page $currentPage of $totalPages',
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ),
-                                SizedBox(height: 8),
-                                Text(
-                                  'Page $currentPage of $totalPages',
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ],
-                            ),
                           ),
                           SizedBox(height: 24),
                         ],
