@@ -8,6 +8,8 @@ import '../services/image_service.dart';
 import '../models/enums.dart';
 import 'genre_series_manager_screen.dart';
 import 'category_books_screen.dart';
+import 'research_papers_screen.dart';
+import 'projects_screen.dart';
 
 class BooksScreen extends StatefulWidget {
   const BooksScreen({Key? key}) : super(key: key);
@@ -136,53 +138,116 @@ class _BooksScreenState extends State<BooksScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                Icon(Icons.menu_book, size: 48, color: Colors.white),
+                Icon(Icons.school, size: 48, color: Colors.white),
                 SizedBox(height: 8),
                 Text(
-                  'View Options',
+                  'Academics',
                   style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
           ),
+          // Books Section with Expandable Sub-menu
+          ExpansionTile(
+            leading: Icon(Icons.menu_book, color: Colors.purpleAccent),
+            title: Text('Books', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            iconColor: Colors.purpleAccent,
+            collapsedIconColor: Colors.white70,
+            children: [
+              ListTile(
+                leading: SizedBox(width: 16),
+                title: Row(
+                  children: [
+                    Icon(Icons.list, color: _viewMode == ViewMode.all ? Colors.purpleAccent : Colors.white54, size: 20),
+                    SizedBox(width: 12),
+                    Text('All Books', style: TextStyle(color: Colors.white)),
+                  ],
+                ),
+                selected: _viewMode == ViewMode.all,
+                selectedTileColor: Colors.purpleAccent.withOpacity(0.1),
+                contentPadding: EdgeInsets.only(left: 32),
+                onTap: () {
+                  setState(() => _viewMode = ViewMode.all);
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: SizedBox(width: 16),
+                title: Row(
+                  children: [
+                    Icon(Icons.folder, color: _viewMode == ViewMode.genres ? Colors.purpleAccent : Colors.white54, size: 20),
+                    SizedBox(width: 12),
+                    Text('By Genres', style: TextStyle(color: Colors.white)),
+                  ],
+                ),
+                selected: _viewMode == ViewMode.genres,
+                selectedTileColor: Colors.purpleAccent.withOpacity(0.1),
+                contentPadding: EdgeInsets.only(left: 32),
+                onTap: () {
+                  setState(() => _viewMode = ViewMode.genres);
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: SizedBox(width: 16),
+                title: Row(
+                  children: [
+                    Icon(Icons.collections_bookmark, color: _viewMode == ViewMode.series ? Colors.purpleAccent : Colors.white54, size: 20),
+                    SizedBox(width: 12),
+                    Text('By Series', style: TextStyle(color: Colors.white)),
+                  ],
+                ),
+                selected: _viewMode == ViewMode.series,
+                selectedTileColor: Colors.purpleAccent.withOpacity(0.1),
+                contentPadding: EdgeInsets.only(left: 32),
+                onTap: () {
+                  setState(() => _viewMode = ViewMode.series);
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: SizedBox(width: 16),
+                title: Row(
+                  children: [
+                    Icon(Icons.person, color: _viewMode == ViewMode.authors ? Colors.purpleAccent : Colors.white54, size: 20),
+                    SizedBox(width: 12),
+                    Text('By Authors', style: TextStyle(color: Colors.white)),
+                  ],
+                ),
+                selected: _viewMode == ViewMode.authors,
+                selectedTileColor: Colors.purpleAccent.withOpacity(0.1),
+                contentPadding: EdgeInsets.only(left: 32),
+                onTap: () {
+                  setState(() => _viewMode = ViewMode.authors);
+                  Navigator.pop(context);
+                },
+              ),
+            ],
+          ),
+          Divider(color: Colors.white24, thickness: 1, indent: 16, endIndent: 16),
+          // Papers Section
           ListTile(
-            leading: Icon(Icons.list, color: _viewMode == ViewMode.all ? Colors.purpleAccent : Colors.white70),
-            title: Text('All Books', style: TextStyle(color: Colors.white)),
-            selected: _viewMode == ViewMode.all,
-            selectedTileColor: Colors.purpleAccent.withOpacity(0.1),
+            leading: Icon(Icons.article, color: Colors.white70),
+            title: Text('Papers', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
             onTap: () {
-              setState(() => _viewMode = ViewMode.all);
               Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ResearchPapersScreen()),
+              );
             },
           ),
+          Divider(color: Colors.white24, thickness: 1, indent: 16, endIndent: 16),
+          // Projects Section
           ListTile(
-            leading: Icon(Icons.folder, color: _viewMode == ViewMode.genres ? Colors.purpleAccent : Colors.white70),
-            title: Text('By Genres', style: TextStyle(color: Colors.white)),
-            selected: _viewMode == ViewMode.genres,
-            selectedTileColor: Colors.purpleAccent.withOpacity(0.1),
+            leading: Icon(Icons.folder_special, color: Colors.white70),
+            title: Text('Projects', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
             onTap: () {
-              setState(() => _viewMode = ViewMode.genres);
               Navigator.pop(context);
-            },
-          ),
-          ListTile(
-            leading: Icon(Icons.collections_bookmark, color: _viewMode == ViewMode.series ? Colors.purpleAccent : Colors.white70),
-            title: Text('By Series', style: TextStyle(color: Colors.white)),
-            selected: _viewMode == ViewMode.series,
-            selectedTileColor: Colors.purpleAccent.withOpacity(0.1),
-            onTap: () {
-              setState(() => _viewMode = ViewMode.series);
-              Navigator.pop(context);
-            },
-          ),
-          ListTile(
-            leading: Icon(Icons.person, color: _viewMode == ViewMode.authors ? Colors.purpleAccent : Colors.white70),
-            title: Text('By Authors', style: TextStyle(color: Colors.white)),
-            selected: _viewMode == ViewMode.authors,
-            selectedTileColor: Colors.purpleAccent.withOpacity(0.1),
-            onTap: () {
-              setState(() => _viewMode = ViewMode.authors);
-              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProjectsScreen()),
+              );
             },
           ),
         ],
