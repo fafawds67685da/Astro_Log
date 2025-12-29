@@ -50,6 +50,9 @@ dependencies:
   # URL launcher for opening links
   url_launcher: ^6.2.3
   
+  # Number formatting
+  intl: ^0.18.1
+  
   # Save images to gallery
   gal: ^2.3.0
   

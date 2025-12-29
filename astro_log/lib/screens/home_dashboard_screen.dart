@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'dart:math' as math;
 import '../services/database_helper.dart';
+import 'package:intl/intl.dart';
 
 class HomeDashboardScreen extends StatefulWidget {
   const HomeDashboardScreen({Key? key}) : super(key: key);
@@ -89,6 +90,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with TickerPr
         });
       }
     } catch (e) {
+      print('Error loading stats: $e');
       if (mounted) {
         setState(() {
           _stats = {
@@ -405,7 +407,20 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with TickerPr
                         sliver: SliverList(
                           delegate: SliverChildListDelegate([
                             const SizedBox(height: 24),
-                            // Book Library card removed - stats shown in Reading Statistics section above
+                            
+                            CosmicStatCard(
+                              title: 'Book Library',
+                              icon: Icons.menu_book,
+                              completed: _stats['booksRead'] ?? 0,
+                              total: _stats['booksTotal'] ?? 0,
+                              completedLabel: 'Read',
+                              pendingLabel: 'Unread',
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF9D50BB), Color(0xFF6E48AA)],
+                              ),
+                              pulseAnimation: _pulseController,
+                            ),
+                            const SizedBox(height: 16),
                             
                             CosmicStatCard(
                               title: 'Celestial Objects',
@@ -1177,7 +1192,7 @@ class WishlistStatCard extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  '\$${totalCost.toStringAsFixed(2)}',
+                                  '₹${NumberFormat('#,##,###').format(totalCost.toInt())}',
                                   style: TextStyle(
                                     fontSize: 24,
                                     fontWeight: FontWeight.bold,
@@ -1240,7 +1255,7 @@ class WishlistStatCard extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(
-                                  '\$${pinnedCost.toStringAsFixed(2)}',
+                                  '₹${NumberFormat('#,##,###').format(pinnedCost.toInt())}',
                                   style: TextStyle(
                                     fontSize: 20,
                                     fontWeight: FontWeight.bold,

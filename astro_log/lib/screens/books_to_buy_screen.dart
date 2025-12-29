@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import '../services/database_helper.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:intl/intl.dart';
 
 class BooksToBuyScreen extends StatefulWidget {
   const BooksToBuyScreen({Key? key}) : super(key: key);
@@ -64,13 +65,91 @@ class _BooksToBuyScreenState extends State<BooksToBuyScreen> {
           }
 
           final books = snapshot.data!;
+          
+          // Calculate total cost
+          double totalCost = 0;
+          for (var book in books) {
+            if (book['price'] != null) {
+              totalCost += (book['price'] as num).toDouble();
+            }
+          }
+          
+          final formatter = NumberFormat('#,##,###');
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: books.length,
-            itemBuilder: (context, index) {
-              final book = books[index];
-              final isPinned = book['isPinned'] == 1;
+          return Column(
+            children: [
+              // Total Cost Header
+              Container(
+                padding: EdgeInsets.all(16),
+                margin: EdgeInsets.fromLTRB(16, 16, 16, 0),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFFFFB300), Color(0xFFFF8C00)],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0xFFFFB300).withOpacity(0.3),
+                      blurRadius: 10,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.currency_rupee, color: Colors.white, size: 28),
+                        SizedBox(width: 8),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Total Cost',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                            Text(
+                              '₹${formatter.format(totalCost.toInt())}',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${books.length} ${books.length == 1 ? 'Book' : 'Books'}',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: books.length,
+                  itemBuilder: (context, index) {
+                    final book = books[index];
+                    final isPinned = book['isPinned'] == 1;
               
               return Card(
                 color: const Color(0xFF1A1A2E),
@@ -159,7 +238,7 @@ class _BooksToBuyScreenState extends State<BooksToBuyScreen> {
                                     border: Border.all(color: Colors.green, width: 1),
                                   ),
                                   child: Text(
-                                    '\$${(book['price'] as double).toStringAsFixed(2)}',
+                                    '₹${NumberFormat('#,##,###').format((book['price'] as num).toInt())}',
                                     style: const TextStyle(
                                       color: Colors.greenAccent,
                                       fontSize: 14,
@@ -201,6 +280,9 @@ class _BooksToBuyScreenState extends State<BooksToBuyScreen> {
                 ),
               );
             },
+          ),
+              ),
+            ],
           );
         },
       ),
@@ -483,7 +565,7 @@ class _AddEditWishlistBookScreenState extends State<AddEditWishlistBookScreen> {
                   borderSide: BorderSide(color: Colors.amber),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                prefixText: '\$ ',
+                prefixText: '₹ ',
                 prefixStyle: TextStyle(color: Colors.greenAccent),
               ),
               keyboardType: TextInputType.numberWithOptions(decimal: true),

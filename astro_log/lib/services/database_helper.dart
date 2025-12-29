@@ -21,7 +21,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 11,
+      version: 12,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -303,6 +303,15 @@ class DatabaseHelper {
           createdAt TEXT NOT NULL
         )
       ''');
+    }
+    
+    if (oldVersion < 12) {
+      // Add folderName to wishlist_books
+      try {
+        await db.execute('ALTER TABLE wishlist_books ADD COLUMN folderName TEXT');
+      } catch (e) {
+        // Column might already exist
+      }
     }
   }
 
@@ -1089,8 +1098,8 @@ class DatabaseHelper {
     final stats = result.first;
     return {
       'totalBooks': (stats['totalBooks'] as int?) ?? 0,
-      'totalCost': (stats['totalCost'] as double?) ?? 0.0,
-      'pinnedCost': (stats['pinnedCost'] as double?) ?? 0.0,
+      'totalCost': ((stats['totalCost'] as num?) ?? 0).toDouble(),
+      'pinnedCost': ((stats['pinnedCost'] as num?) ?? 0).toDouble(),
     };
   }
 }
