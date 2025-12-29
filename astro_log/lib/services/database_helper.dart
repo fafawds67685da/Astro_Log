@@ -21,7 +21,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 9,
+      version: 10,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -279,6 +279,15 @@ class DatabaseHelper {
         // Column might already exist
       }
     }
+    
+    if (oldVersion < 10) {
+      // Add coverImagePath to genres table
+      try {
+        await db.execute('ALTER TABLE genres ADD COLUMN coverImagePath TEXT');
+      } catch (e) {
+        // Column might already exist
+      }
+    }
   }
 
   Future<void> _createDB(Database db, int version) async {
@@ -314,6 +323,7 @@ class DatabaseHelper {
       CREATE TABLE genres (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
+        coverImagePath TEXT,
         createdAt TEXT NOT NULL
       )
     ''');

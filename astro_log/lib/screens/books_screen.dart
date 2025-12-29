@@ -19,9 +19,17 @@ class BooksScreen extends StatefulWidget {
 class _BooksScreenState extends State<BooksScreen> {
   final DatabaseHelper _db = DatabaseHelper.instance;
   final ImageService _imageService = ImageService.instance;
+  final TextEditingController _searchController = TextEditingController();
   
   ViewMode _viewMode = ViewMode.all;
   Set<ReadingStatus> _statusFilters = {ReadingStatus.all};
+  String _searchQuery = '';
+  
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
   
   @override
   Widget build(BuildContext context) {
@@ -47,10 +55,69 @@ class _BooksScreenState extends State<BooksScreen> {
       body: Column(
         children: [
           _buildStatusFilters(),
+          _buildSearchBar(),
           Expanded(child: _buildContentByMode()),
         ],
       ),
     );
+  }
+  
+  Widget _buildSearchBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: TextField(
+        controller: _searchController,
+        style: TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          hintText: _getSearchHint(),
+          hintStyle: TextStyle(color: Colors.white38),
+          prefixIcon: Icon(Icons.search, color: Colors.purpleAccent),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: Icon(Icons.clear, color: Colors.white54),
+                  onPressed: () {
+                    setState(() {
+                      _searchController.clear();
+                      _searchQuery = '';
+                    });
+                  },
+                )
+              : null,
+          filled: true,
+          fillColor: Color(0xFF1A1A2E),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.purpleAccent.withOpacity(0.3)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.purpleAccent),
+          ),
+        ),
+        onChanged: (value) {
+          setState(() {
+            _searchQuery = value.toLowerCase();
+          });
+        },
+      ),
+    );
+  }
+  
+  String _getSearchHint() {
+    switch (_viewMode) {
+      case ViewMode.all:
+        return 'Search books by title or author...';
+      case ViewMode.genres:
+        return 'Search genres...';
+      case ViewMode.series:
+        return 'Search series...';
+      case ViewMode.authors:
+        return 'Search authors...';
+    }
   }
   
   Widget _buildDrawer() {
@@ -229,13 +296,49 @@ class _BooksScreenState extends State<BooksScreen> {
           return _buildEmptyState('No books found', 'Add your first book to get started');
         }
         
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: snapshot.data!.length,
-          itemBuilder: (context, index) {
-            final book = snapshot.data![index];
-            return _buildBookCard(book, cardIndex: index + 1);
-          },
+        // Filter by search query
+        final filteredBooks = snapshot.data!.where((book) {
+          if (_searchQuery.isEmpty) return true;
+          final title = (book['title'] ?? '').toString().toLowerCase();
+          final author = (book['author'] ?? '').toString().toLowerCase();
+          return title.contains(_searchQuery) || author.contains(_searchQuery);
+        }).toList();
+        
+        if (filteredBooks.isEmpty) {
+          return _buildEmptyState('No books match your search', 'Try a different search term');
+        }
+        
+        return Column(
+          children: [
+            // Count header
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.book, color: Colors.purpleAccent, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    '${filteredBooks.length} ${filteredBooks.length == 1 ? 'Book' : 'Books'}',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: filteredBooks.length,
+                itemBuilder: (context, index) {
+                  final book = filteredBooks[index];
+                  return _buildBookCard(book, cardIndex: index + 1);
+                },
+              ),
+            ),
+          ],
         );
       },
     );
@@ -249,27 +352,63 @@ class _BooksScreenState extends State<BooksScreen> {
           return _buildEmptyState('No genres', 'Create genres in settings');
         }
         
-        return GridView.builder(
-          padding: const EdgeInsets.all(16),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            childAspectRatio: 0.85,
-          ),
-          itemCount: snapshot.data!.length,
-          itemBuilder: (context, index) {
-            final genre = snapshot.data![index];
-            final genreName = genre['name'] as String? ?? 'Unnamed Genre';
-            final genreId = genre['id'] as int?;
-            return _buildCategoryCard(
-              name: genreName,
-              icon: Icons.folder,
-              color: Colors.purpleAccent,
-              onTap: () => _navigateToCategoryBooks('genre', genreId, genreName),
-              genreId: genreId,
-            );
-          },
+        // Filter by search query
+        final filteredGenres = snapshot.data!.where((genre) {
+          if (_searchQuery.isEmpty) return true;
+          final name = (genre['name'] ?? '').toString().toLowerCase();
+          return name.contains(_searchQuery);
+        }).toList();
+        
+        if (filteredGenres.isEmpty) {
+          return _buildEmptyState('No genres match your search', 'Try a different search term');
+        }
+        
+        return Column(
+          children: [
+            // Count header
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.folder, color: Colors.purpleAccent, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    '${filteredGenres.length} ${filteredGenres.length == 1 ? 'Genre' : 'Genres'}',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: GridView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  childAspectRatio: 0.85,
+                ),
+                itemCount: filteredGenres.length,
+                itemBuilder: (context, index) {
+                  final genre = filteredGenres[index];
+                  final genreName = genre['name'] as String? ?? 'Unnamed Genre';
+                  final genreId = genre['id'] as int?;
+                  return _buildCategoryCard(
+                    name: genreName,
+                    icon: Icons.folder,
+                    color: Colors.purpleAccent,
+                    onTap: () => _navigateToCategoryBooks('genre', genreId, genreName),
+                    genreId: genreId,
+                    categoryType: 'genre',
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
     );
@@ -285,33 +424,68 @@ class _BooksScreenState extends State<BooksScreen> {
         
         final allItems = [...snapshot.data!, {'id': null, 'name': 'Standalone Books', 'isStandalone': true}];
         
-        return GridView.builder(
-          padding: const EdgeInsets.all(16),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            childAspectRatio: 0.85,
-          ),
-          itemCount: allItems.length,
-          itemBuilder: (context, index) {
-            final series = allItems[index];
-            final isStandalone = series['isStandalone'] == true;
-            final seriesName = series['name'] as String? ?? 'Unnamed Series';
-            final seriesId = series['id'] as int?;
-            return _buildCategoryCard(
-              name: seriesName,
-              icon: isStandalone ? Icons.book : Icons.collections_bookmark,
-              color: isStandalone ? Colors.orangeAccent : Colors.cyanAccent,
-              onTap: () => _navigateToCategoryBooks(
-                isStandalone ? 'standalone' : 'series',
-                seriesId,
-                seriesName,
+        // Filter by search query
+        final filteredItems = allItems.where((series) {
+          if (_searchQuery.isEmpty) return true;
+          final name = (series['name'] ?? '').toString().toLowerCase();
+          return name.contains(_searchQuery);
+        }).toList();
+        
+        if (filteredItems.isEmpty) {
+          return _buildEmptyState('No series match your search', 'Try a different search term');
+        }
+        
+        return Column(
+          children: [
+            // Count header
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.collections_bookmark, color: Colors.cyanAccent, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    '${filteredItems.length} ${filteredItems.length == 1 ? 'Series' : 'Series'}',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
-              seriesId: isStandalone ? null : seriesId,
-              categoryType: isStandalone ? null : 'series',
-            );
-          },
+            ),
+            Expanded(
+              child: GridView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  childAspectRatio: 0.85,
+                ),
+                itemCount: filteredItems.length,
+                itemBuilder: (context, index) {
+                  final series = filteredItems[index];
+                  final isStandalone = series['isStandalone'] == true;
+                  final seriesName = series['name'] as String? ?? 'Unnamed Series';
+                  final seriesId = series['id'] as int?;
+                  return _buildCategoryCard(
+                    name: seriesName,
+                    icon: isStandalone ? Icons.book : Icons.collections_bookmark,
+                    color: isStandalone ? Colors.orangeAccent : Colors.cyanAccent,
+                    onTap: () => _navigateToCategoryBooks(
+                      isStandalone ? 'standalone' : 'series',
+                      seriesId,
+                      seriesName,
+                    ),
+                    seriesId: isStandalone ? null : seriesId,
+                    categoryType: isStandalone ? null : 'series',
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
     );
@@ -337,26 +511,60 @@ class _BooksScreenState extends State<BooksScreen> {
         
         final authors = booksByAuthor.keys.toList()..sort();
         
-        return GridView.builder(
-          padding: const EdgeInsets.all(16),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            childAspectRatio: 0.85,
-          ),
-          itemCount: authors.length,
-          itemBuilder: (context, index) {
-            final author = authors[index];
-            return _buildCategoryCard(
-              name: author,
-              icon: Icons.person,
-              color: Colors.tealAccent,
-              onTap: () => _navigateToCategoryBooks('author', null, author),
-              bookCount: booksByAuthor[author]!.length,
-              categoryType: 'author',
-            );
-          },
+        // Filter by search query
+        final filteredAuthors = authors.where((author) {
+          if (_searchQuery.isEmpty) return true;
+          return author.toLowerCase().contains(_searchQuery);
+        }).toList();
+        
+        if (filteredAuthors.isEmpty) {
+          return _buildEmptyState('No authors match your search', 'Try a different search term');
+        }
+        
+        return Column(
+          children: [
+            // Count header
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.person, color: Colors.tealAccent, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    '${filteredAuthors.length} ${filteredAuthors.length == 1 ? 'Author' : 'Authors'}',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: GridView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  childAspectRatio: 0.85,
+                ),
+                itemCount: filteredAuthors.length,
+                itemBuilder: (context, index) {
+                  final author = filteredAuthors[index];
+                  return _buildCategoryCard(
+                    name: author,
+                    icon: Icons.person,
+                    color: Colors.tealAccent,
+                    onTap: () => _navigateToCategoryBooks('author', null, author),
+                    bookCount: booksByAuthor[author]!.length,
+                    categoryType: 'author',
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
     );
@@ -377,7 +585,9 @@ class _BooksScreenState extends State<BooksScreen> {
       builder: (context, snapshot) {
         final count = snapshot.data?['count'] ?? 0;
         final coverImage = snapshot.data?['coverImage'] as String?;
-        final showMenu = (categoryType == 'series' && seriesId != null) || categoryType == 'author';
+        final showMenu = (categoryType == 'series' && seriesId != null) || 
+                        categoryType == 'author' || 
+                        (categoryType == 'genre' && genreId != null);
         
         return GestureDetector(
           onTap: onTap,
@@ -506,9 +716,21 @@ class _BooksScreenState extends State<BooksScreen> {
                           color: Color(0xFF1A1A2E),
                           onSelected: (value) {
                             if (value == 'edit') {
-                              _editCategory(categoryType!, seriesId, name);
+                              if (categoryType == 'genre') {
+                                _editCategory('genre', genreId, name);
+                              } else if (categoryType == 'series') {
+                                _editCategory('series', seriesId, name);
+                              } else if (categoryType == 'author') {
+                                _editCategory('author', null, name);
+                              }
                             } else if (value == 'delete') {
-                              _deleteCategory(categoryType!, seriesId, name);
+                              if (categoryType == 'genre') {
+                                _deleteCategory('genre', genreId, name);
+                              } else if (categoryType == 'series') {
+                                _deleteCategory('series', seriesId, name);
+                              } else if (categoryType == 'author') {
+                                _deleteCategory('author', null, name);
+                              }
                             }
                           },
                           itemBuilder: (context) => [
@@ -581,6 +803,13 @@ class _BooksScreenState extends State<BooksScreen> {
         orElse: () => <String, dynamic>{},
       );
       coverImage = author['coverImagePath'] as String?;
+    } else if (categoryType == 'genre' && genreId != null) {
+      final allGenres = await _db.getGenres();
+      final genre = allGenres.firstWhere(
+        (g) => g['id'] == genreId,
+        orElse: () => <String, dynamic>{},
+      );
+      coverImage = genre['coverImagePath'] as String?;
     }
     
     return {'count': count, 'coverImage': coverImage};
@@ -1098,17 +1327,22 @@ class _BooksScreenState extends State<BooksScreen> {
     }
   }
   
-  Future<void> _deleteCategory(String categoryType, int? seriesId, String name) async {
+  Future<void> _deleteCategory(String categoryType, int? categoryId, String name) async {
+    String typeLabel = categoryType == 'series' ? 'Series' : 
+                      categoryType == 'genre' ? 'Genre' : 'Author';
+    
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Color(0xFF1A1A2E),
-        title: Text('Delete ${categoryType == 'series' ? 'Series' : 'Author'}', 
+        title: Text('Delete $typeLabel', 
                    style: TextStyle(color: Colors.white)),
         content: Text(
           categoryType == 'series'
             ? 'Delete series "$name"? All books will be moved to standalone.'
-            : 'Delete all books by "$name"? This cannot be undone.',
+            : categoryType == 'genre'
+              ? 'Delete genre "$name"? Genre will be removed from all books.'
+              : 'Delete all books by "$name"? This cannot be undone.',
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -1126,9 +1360,9 @@ class _BooksScreenState extends State<BooksScreen> {
     );
     
     if (confirmed == true) {
-      if (categoryType == 'series' && seriesId != null) {
+      if (categoryType == 'series' && categoryId != null) {
         // Remove series from all books (set seriesId and seriesNumber to null)
-        final books = await _db.getBooksBySeries(seriesId);
+        final books = await _db.getBooksBySeries(categoryId);
         for (var book in books) {
           await _db.updateBook(book['id'], {
             ...book,
@@ -1137,7 +1371,18 @@ class _BooksScreenState extends State<BooksScreen> {
           });
         }
         // Delete the series itself
-        await _db.deleteBookSeries(seriesId);
+        await _db.deleteBookSeries(categoryId);
+      } else if (categoryType == 'genre' && categoryId != null) {
+        // Remove genre from all books
+        final allBooks = await _db.getAllBooks();
+        for (var book in allBooks) {
+          final bookGenres = await _db.getBookGenres(book['id']);
+          if (bookGenres.any((g) => g['id'] == categoryId)) {
+            await _db.removeGenreFromBook(book['id'], categoryId);
+          }
+        }
+        // Delete the genre itself
+        await _db.deleteGenre(categoryId);
       } else if (categoryType == 'author') {
         // Delete all books by this author
         final allBooks = await _db.getAllBooks();
@@ -1157,13 +1402,13 @@ class _BooksScreenState extends State<BooksScreen> {
     }
   }
   
-  void _editCategory(String categoryType, int? seriesId, String name) {
+  void _editCategory(String categoryType, int? categoryId, String name) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => EditCategoryScreen(
           categoryType: categoryType,
-          seriesId: seriesId,
+          categoryId: categoryId,
           categoryName: name,
         ),
       ),
@@ -2236,16 +2481,16 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   }
 }
 
-// Edit Category Screen (for Series and Authors)
+// Edit Category Screen (for Series, Authors, and Genres)
 class EditCategoryScreen extends StatefulWidget {
-  final String categoryType; // 'series' or 'author'
-  final int? seriesId;
+  final String categoryType; // 'series', 'author', or 'genre'
+  final int? categoryId; // seriesId or genreId
   final String categoryName;
 
   const EditCategoryScreen({
     Key? key,
     required this.categoryType,
-    this.seriesId,
+    this.categoryId,
     required this.categoryName,
   }) : super(key: key);
 
@@ -2256,6 +2501,7 @@ class EditCategoryScreen extends StatefulWidget {
 class _EditCategoryScreenState extends State<EditCategoryScreen> {
   final DatabaseHelper _db = DatabaseHelper.instance;
   final ImageService _imageService = ImageService.instance;
+  final TextEditingController _nameController = TextEditingController();
   List<Map<String, dynamic>> _categoryBooks = [];
   List<Map<String, dynamic>> _availableBooks = [];
   String? _coverImagePath;
@@ -2263,20 +2509,38 @@ class _EditCategoryScreenState extends State<EditCategoryScreen> {
   @override
   void initState() {
     super.initState();
+    _nameController.text = widget.categoryName;
     _loadBooks();
     _loadCoverImage();
+  }
+  
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadCoverImage() async {
     if (widget.categoryType == 'series') {
       final allSeries = await _db.getBookSeries();
       final series = allSeries.firstWhere(
-        (s) => s['id'] == widget.seriesId,
+        (s) => s['id'] == widget.categoryId,
         orElse: () => <String, dynamic>{},
       );
       if (series.isNotEmpty && series['coverImagePath'] != null) {
         setState(() {
           _coverImagePath = series['coverImagePath'];
+        });
+      }
+    } else if (widget.categoryType == 'genre') {
+      final allGenres = await _db.getGenres();
+      final genre = allGenres.firstWhere(
+        (g) => g['id'] == widget.categoryId,
+        orElse: () => <String, dynamic>{},
+      );
+      if (genre.isNotEmpty && genre['coverImagePath'] != null) {
+        setState(() {
+          _coverImagePath = genre['coverImagePath'];
         });
       }
     } else {
@@ -2295,17 +2559,17 @@ class _EditCategoryScreenState extends State<EditCategoryScreen> {
 
   Future<void> _loadBooks() async {
     if (widget.categoryType == 'series') {
-      _categoryBooks = List.from(await _db.getBooksBySeries(widget.seriesId!));
+      _categoryBooks = List.from(await _db.getBooksBySeries(widget.categoryId!));
+      final allBooks = await _db.getAllBooks();
+      _availableBooks = allBooks.where((b) => b['seriesId'] != widget.categoryId).toList();
+    } else if (widget.categoryType == 'genre') {
+      _categoryBooks = await _db.getBooksByGenreNew(widget.categoryId!);
+      final allBooks = await _db.getAllBooks();
+      final currentBookIds = _categoryBooks.map((b) => b['id']).toSet();
+      _availableBooks = allBooks.where((b) => !currentBookIds.contains(b['id'])).toList();
     } else {
       final allBooks = await _db.getAllBooks();
       _categoryBooks = allBooks.where((b) => b['author'] == widget.categoryName).toList();
-    }
-    
-    // Load available books (books that aren't in this category)
-    final allBooks = await _db.getAllBooks();
-    if (widget.categoryType == 'series') {
-      _availableBooks = allBooks.where((b) => b['seriesId'] != widget.seriesId).toList();
-    } else {
       _availableBooks = allBooks.where((b) => b['author'] != widget.categoryName).toList();
     }
     
@@ -2329,12 +2593,22 @@ class _EditCategoryScreenState extends State<EditCategoryScreen> {
   }
 
   Future<void> _saveCoverImage() async {
-    if (_coverImagePath == null) return;
+    final newName = _nameController.text.trim();
+    if (newName.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Name cannot be empty'), backgroundColor: Colors.red),
+      );
+      return;
+    }
     
     if (widget.categoryType == 'series') {
-      // Save to book_series table
-      await _db.updateBookSeries(widget.seriesId!, {
-        'name': widget.categoryName,
+      await _db.updateBookSeries(widget.categoryId!, {
+        'name': newName,
+        'coverImagePath': _coverImagePath,
+      });
+    } else if (widget.categoryType == 'genre') {
+      await _db.updateGenre(widget.categoryId!, {
+        'name': newName,
         'coverImagePath': _coverImagePath,
       });
     } else {
@@ -2347,26 +2621,38 @@ class _EditCategoryScreenState extends State<EditCategoryScreen> {
       
       if (existingAuthor.isNotEmpty) {
         await _db.updateAuthor(existingAuthor['id'], {
-          'name': widget.categoryName,
+          'name': newName,
           'coverImagePath': _coverImagePath,
         });
       } else {
-        // Create new author entry
         await _db.insertAuthor({
-          'name': widget.categoryName,
+          'name': newName,
           'coverImagePath': _coverImagePath,
           'createdAt': DateTime.now().toIso8601String(),
         });
+      }
+      
+      // Update book author names
+      if (newName != widget.categoryName) {
+        for (var book in _categoryBooks) {
+          await _db.updateBook(book['id'], {
+            ...book,
+            'author': newName,
+          });
+        }
       }
     }
     
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Cover image saved!'),
+        content: Text('Changes saved successfully!'),
         backgroundColor: Colors.green,
       ),
     );
+    
+    // Go back after saving
+    Navigator.pop(context);
   }
 
   Future<void> _removeBookFromCategory(Map<String, dynamic> book) async {
@@ -2376,6 +2662,8 @@ class _EditCategoryScreenState extends State<EditCategoryScreen> {
         'seriesId': null,
         'seriesNumber': null,
       });
+    } else if (widget.categoryType == 'genre') {
+      await _db.removeGenreFromBook(book['id'], widget.categoryId!);
     } else {
       // For authors, we can't remove without deleting - show message
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2430,9 +2718,11 @@ class _EditCategoryScreenState extends State<EditCategoryScreen> {
         
         await _db.updateBook(selected['id'], {
           ...selected,
-          'seriesId': widget.seriesId,
+          'seriesId': widget.categoryId,
           'seriesNumber': maxNumber + 1,
         });
+      } else if (widget.categoryType == 'genre') {
+        await _db.addGenreToBook(selected['id'], widget.categoryId!);
       } else {
         await _db.updateBook(selected['id'], {
           ...selected,
@@ -2493,12 +2783,15 @@ class _EditCategoryScreenState extends State<EditCategoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final color = widget.categoryType == 'series' ? Colors.cyanAccent : Colors.tealAccent;
+    final color = widget.categoryType == 'series' ? Colors.cyanAccent : 
+                  widget.categoryType == 'genre' ? Colors.purpleAccent : Colors.tealAccent;
+    final typeLabel = widget.categoryType == 'series' ? 'Series' :
+                     widget.categoryType == 'genre' ? 'Genre' : 'Author';
     
     return Scaffold(
       backgroundColor: Color(0xFF0F0E17),
       appBar: AppBar(
-        title: Text('Edit ${widget.categoryName}'),
+        title: Text('Edit $typeLabel'),
         backgroundColor: Color(0xFF1A1A2E),
         actions: [
           IconButton(
@@ -2511,17 +2804,42 @@ class _EditCategoryScreenState extends State<EditCategoryScreen> {
             onPressed: _addBookToCategory,
             tooltip: 'Add Book',
           ),
+          IconButton(
+            icon: Icon(Icons.save),
+            onPressed: _saveCoverImage,
+            tooltip: 'Save Changes',
+          ),
         ],
       ),
       body: Column(
         children: [
+          // Name edit field
+          Padding(
+            padding: EdgeInsets.all(16),
+            child: TextField(
+              controller: _nameController,
+              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              decoration: InputDecoration(
+                labelText: '$typeLabel Name',
+                labelStyle: TextStyle(color: color),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: color.withOpacity(0.5)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: color),
+                ),
+              ),
+            ),
+          ),
           if (_coverImagePath != null)
             Stack(
               children: [
                 Container(
                   height: 200,
                   width: double.infinity,
-                  margin: EdgeInsets.all(16),
+                  margin: EdgeInsets.symmetric(horizontal: 16),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(16),
                     image: DecorationImage(
@@ -2531,17 +2849,25 @@ class _EditCategoryScreenState extends State<EditCategoryScreen> {
                   ),
                 ),
                 Positioned(
-                  bottom: 24,
+                  top: 8,
                   right: 24,
-                  child: ElevatedButton.icon(
-                    onPressed: _saveCoverImage,
-                    icon: Icon(Icons.save),
-                    label: Text('Save Cover'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: color,
-                      foregroundColor: Colors.black,
-                      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  child: IconButton(
+                    icon: Icon(Icons.delete, color: Colors.redAccent, size: 28),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.black.withOpacity(0.7),
                     ),
+                    onPressed: () {
+                      setState(() {
+                        _coverImagePath = null;
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Cover photo removed. Click Save to confirm.'),
+                          backgroundColor: Colors.orange,
+                        ),
+                      );
+                    },
+                    tooltip: 'Remove Cover Photo',
                   ),
                 ),
               ],
@@ -2605,6 +2931,13 @@ class _EditCategoryScreenState extends State<EditCategoryScreen> {
             ),
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _saveCoverImage,
+        backgroundColor: color,
+        foregroundColor: Colors.black,
+        icon: Icon(Icons.save),
+        label: Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
     );
   }
