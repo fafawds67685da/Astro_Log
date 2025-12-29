@@ -62,8 +62,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with TickerPr
       final projects = await db.getProjects();
       final doneProjects = projects.where((p) => p['status'] == 'Done').length;
       
-      final papers = await db.getResearchPapers();
-      final readPapers = papers.where((p) => p['status'] == 'Read').length;
+      final paperStats = await db.getResearchPaperStatistics();
       
       final albums = await db.getGalleryAlbums();
       final images = await db.getGalleryImages();
@@ -77,8 +76,12 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with TickerPr
             'objectsTotal': objects.length,
             'projectsDone': doneProjects,
             'projectsTotal': projects.length,
-            'papersRead': readPapers,
-            'papersTotal': papers.length,
+            'researchPaperPending': paperStats['researchPaperPending'],
+            'researchPaperUnderway': paperStats['researchPaperUnderway'],
+            'researchPaperDone': paperStats['researchPaperDone'],
+            'articlePending': paperStats['articlePending'],
+            'articleUnderway': paperStats['articleUnderway'],
+            'articleDone': paperStats['articleDone'],
             'albumsTotal': albums.length,
             'imagesTotal': images.length,
             'wishlistTotal': wishlistStats['totalBooks'],
@@ -97,7 +100,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with TickerPr
             'booksRead': 0, 'booksTotal': 0,
             'objectsObserved': 0, 'objectsTotal': 0,
             'projectsDone': 0, 'projectsTotal': 0,
-            'papersRead': 0, 'papersTotal': 0,
+            'researchPaperPending': 0, 'researchPaperUnderway': 0, 'researchPaperDone': 0,
+            'articlePending': 0, 'articleUnderway': 0, 'articleDone': 0,
             'albumsTotal': 0, 'imagesTotal': 0,
             'wishlistTotal': 0, 'wishlistCost': 0.0,
             'wishlistPinnedCost': 0.0, 'wishlistPinnedCount': 0,
@@ -450,16 +454,13 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> with TickerPr
                             ),
                             const SizedBox(height: 16),
                             
-                            CosmicStatCard(
-                              title: 'Research Papers',
-                              icon: Icons.article,
-                              completed: _stats['papersRead'] ?? 0,
-                              total: _stats['papersTotal'] ?? 0,
-                              completedLabel: 'Read',
-                              pendingLabel: 'Unread',
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFFF093FB), Color(0xFFF5576C)],
-                              ),
+                            ResearchPapersStatCard(
+                              researchPaperPending: _stats['researchPaperPending'] ?? 0,
+                              researchPaperUnderway: _stats['researchPaperUnderway'] ?? 0,
+                              researchPaperDone: _stats['researchPaperDone'] ?? 0,
+                              articlePending: _stats['articlePending'] ?? 0,
+                              articleUnderway: _stats['articleUnderway'] ?? 0,
+                              articleDone: _stats['articleDone'] ?? 0,
                               pulseAnimation: _pulseController,
                             ),
                             const SizedBox(height: 16),
@@ -1038,250 +1039,465 @@ class WishlistStatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: pulseAnimation,
-      builder: (context, child) {
-        final pulseValue = pulseAnimation.value;
-        return Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: LinearGradient(
-              colors: [Color(0xFFFFB300), Color(0xFFFF8C00)],
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Color(0xFFFFB300).withOpacity(0.3 + pulseValue * 0.2),
-                blurRadius: 20 + pulseValue * 10,
-                spreadRadius: 2 + pulseValue * 3,
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.white.withOpacity(0.1),
-                      Colors.white.withOpacity(0.05),
+    return GlassContainer(
+      blur: 15,
+      opacity: 0.12,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFFB300), Color(0xFFFF8C00)],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFFFB300).withOpacity(0.4),
+                        blurRadius: 12,
+                        spreadRadius: 1,
+                      ),
                     ],
                   ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.2),
-                    width: 1.5,
+                  child: const Icon(
+                    Icons.shopping_cart,
+                    color: Colors.white,
+                    size: 28,
                   ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(
-                            Icons.shopping_cart,
-                            color: Colors.white,
-                            size: 28,
-                          ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Books to Buy',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Books to Buy',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white.withOpacity(0.95),
-                                ),
-                              ),
-                              Text(
-                                'Wishlist',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white.withOpacity(0.7),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    
-                    // Total stats
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Container(
-                            padding: EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.1),
-                              ),
-                            ),
-                            child: Column(
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.book, color: Colors.white70, size: 16),
-                                    SizedBox(width: 6),
-                                    Text(
-                                      'Total Books',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.white.withOpacity(0.7),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  '$totalBooks',
-                                  style: TextStyle(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Container(
-                            padding: EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.1),
-                              ),
-                            ),
-                            child: Column(
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.attach_money, color: Colors.greenAccent, size: 16),
-                                    SizedBox(width: 6),
-                                    Text(
-                                      'Total Cost',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.white.withOpacity(0.7),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  '₹${NumberFormat('#,##,###').format(totalCost.toInt())}',
-                                  style: TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.greenAccent,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    
-                    // Pinned books section
-                    if (pinnedCount > 0) ...[
-                      const SizedBox(height: 16),
-                      Container(
-                        padding: EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.amber.withOpacity(0.3),
-                              Colors.amber.withOpacity(0.1),
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Colors.amber.withOpacity(0.5),
-                            width: 2,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.push_pin, color: Colors.amber, size: 20),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Top $pinnedCount Pinned ${pinnedCount == 1 ? 'Book' : 'Books'}',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  SizedBox(height: 4),
-                                  Text(
-                                    'Priority purchases',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.white70,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  '₹${NumberFormat('#,##,###').format(pinnedCost.toInt())}',
-                                  style: TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.amber,
-                                  ),
-                                ),
-                                Text(
-                                  'total cost',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.white70,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+                      ),
+                      Text(
+                        'Wishlist',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.white.withOpacity(0.5),
                         ),
                       ),
                     ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            
+            // Total stats
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.1),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.book, color: Colors.white.withOpacity(0.7), size: 16),
+                            SizedBox(width: 6),
+                            Text(
+                              'Total Books',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.white.withOpacity(0.6),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '$totalBooks',
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Container(
+                    padding: EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.1),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.currency_rupee, color: Color(0xFFFFB300), size: 16),
+                            SizedBox(width: 6),
+                            Text(
+                              'Total Cost',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.white.withOpacity(0.6),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '₹${NumberFormat('#,##,###').format(totalCost.toInt())}',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFFFB300),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            
+            // Pinned books section
+            if (pinnedCount > 0) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Color(0xFFFFB300).withOpacity(0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.push_pin, color: Color(0xFFFFB300), size: 20),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Top $pinnedCount Pinned ${pinnedCount == 1 ? 'Book' : 'Books'}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Priority purchases',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.white70,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '₹${NumberFormat('#,##,###').format(pinnedCost.toInt())}',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFFFB300),
+                          ),
+                        ),
+                        Text(
+                          'total cost',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ResearchPapersStatCard extends StatelessWidget {
+  final int researchPaperPending;
+  final int researchPaperUnderway;
+  final int researchPaperDone;
+  final int articlePending;
+  final int articleUnderway;
+  final int articleDone;
+  final AnimationController pulseAnimation;
+
+  const ResearchPapersStatCard({
+    super.key,
+    required this.researchPaperPending,
+    required this.researchPaperUnderway,
+    required this.researchPaperDone,
+    required this.articlePending,
+    required this.articleUnderway,
+    required this.articleDone,
+    required this.pulseAnimation,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final totalRP = researchPaperPending + researchPaperUnderway + researchPaperDone;
+    final totalArticles = articlePending + articleUnderway + articleDone;
+    
+    return GlassContainer(
+      blur: 15,
+      opacity: 0.12,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFF093FB), Color(0xFFF5576C)],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFF093FB).withOpacity(0.4),
+                        blurRadius: 12,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.article,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                const Expanded(
+                  child: Text(
+                    'Research Papers / Articles',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
             ),
+            const SizedBox(height: 20),
+            
+            // Research Papers Section
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.1),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF4A90E2), Color(0xFF357ABD)],
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          'Research Papers',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        'Total: $totalRP',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.7),
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _StatusCount(
+                        label: 'Pending',
+                        count: researchPaperPending,
+                        color: const Color(0xFFFF9800),
+                      ),
+                      _StatusCount(
+                        label: 'Underway',
+                        count: researchPaperUnderway,
+                        color: const Color(0xFFFFEB3B),
+                      ),
+                      _StatusCount(
+                        label: 'Done',
+                        count: researchPaperDone,
+                        color: const Color(0xFF4CAF50),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            // Articles Section
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.1),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFFF9800), Color(0xFFF57C00)],
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          'Articles',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        'Total: $totalArticles',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.7),
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _StatusCount(
+                        label: 'Pending',
+                        count: articlePending,
+                        color: const Color(0xFFFF9800),
+                      ),
+                      _StatusCount(
+                        label: 'Underway',
+                        count: articleUnderway,
+                        color: const Color(0xFFFFEB3B),
+                      ),
+                      _StatusCount(
+                        label: 'Done',
+                        count: articleDone,
+                        color: const Color(0xFF4CAF50),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusCount extends StatelessWidget {
+  final String label;
+  final int count;
+  final Color color;
+
+  const _StatusCount({
+    required this.label,
+    required this.count,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          '$count',
+          style: TextStyle(
+            color: color,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
           ),
-        );
-      },
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 12,
+          ),
+        ),
+      ],
     );
   }
 }

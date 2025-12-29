@@ -743,6 +743,46 @@ class DatabaseHelper {
     return await db.delete('research_papers', where: 'id = ?', whereArgs: [id]);
   }
 
+  Future<Map<String, dynamic>> getResearchPaperStatistics() async {
+    final db = await database;
+    
+    final result = await db.rawQuery('''
+      SELECT 
+        type,
+        status,
+        COUNT(*) as count
+      FROM research_papers
+      GROUP BY type, status
+    ''');
+    
+    Map<String, dynamic> stats = {
+      'researchPaperPending': 0,
+      'researchPaperUnderway': 0,
+      'researchPaperDone': 0,
+      'articlePending': 0,
+      'articleUnderway': 0,
+      'articleDone': 0,
+    };
+    
+    for (var row in result) {
+      final type = row['type'] as String? ?? 'Research Paper';
+      final status = row['status'] as String;
+      final count = row['count'] as int;
+      
+      if (type == 'Research Paper') {
+        if (status == 'Pending') stats['researchPaperPending'] = count;
+        if (status == 'Underway') stats['researchPaperUnderway'] = count;
+        if (status == 'Done') stats['researchPaperDone'] = count;
+      } else if (type == 'Article') {
+        if (status == 'Pending') stats['articlePending'] = count;
+        if (status == 'Underway') stats['articleUnderway'] = count;
+        if (status == 'Done') stats['articleDone'] = count;
+      }
+    }
+    
+    return stats;
+  }
+
   // Get books by genre
   Future<List<Map<String, dynamic>>> getBooksByGenre(int? genreId, {bool? isRead}) async {
     final db = await database;
