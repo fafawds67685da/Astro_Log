@@ -21,7 +21,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 10,
+      version: 11,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -287,6 +287,22 @@ class DatabaseHelper {
       } catch (e) {
         // Column might already exist
       }
+    }
+    
+    if (oldVersion < 11) {
+      // Create wishlist_books table for books to buy
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS wishlist_books (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          author TEXT,
+          imagePath TEXT,
+          link TEXT,
+          price REAL,
+          isPinned INTEGER NOT NULL DEFAULT 0,
+          createdAt TEXT NOT NULL
+        )
+      ''');
     }
   }
 
@@ -989,6 +1005,92 @@ class DatabaseHelper {
       'readingPercentage': statusCounts['reading'] != null && (statusCounts['read']! + statusCounts['reading']! + statusCounts['not_read']!) > 0
           ? (statusCounts['reading']! / (statusCounts['read']! + statusCounts['reading']! + statusCounts['not_read']!) * 100)
           : 0.0,
+    };
+  }
+  
+  // ========== Wishlist Books Methods ==========
+  
+  // Create wishlist book
+  Future<int> createWishlistBook(Map<String, dynamic> wishlistBook) async {
+    final db = await database;
+    return await db.insert('wishlist_books', wishlistBook);
+  }
+  
+  // Get all wishlist books
+  Future<List<Map<String, dynamic>>> getWishlistBooks() async {
+    final db = await database;
+    return await db.query('wishlist_books', orderBy: 'isPinned DESC, createdAt DESC');
+  }
+  
+  // Get pinned wishlist books (max 3)
+  Future<List<Map<String, dynamic>>> getPinnedWishlistBooks() async {
+    final db = await database;
+    return await db.query(
+      'wishlist_books',
+      where: 'isPinned = 1',
+      orderBy: 'createdAt DESC',
+      limit: 3,
+    );
+  }
+  
+  // Update wishlist book
+  Future<int> updateWishlistBook(int id, Map<String, dynamic> wishlistBook) async {
+    final db = await database;
+    return await db.update(
+      'wishlist_books',
+      wishlistBook,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+  
+  // Pin/unpin wishlist book
+  Future<int> toggleWishlistBookPin(int id, bool isPinned) async {
+    final db = await database;
+    
+    // If pinning, check if we already have 3 pinned books
+    if (isPinned) {
+      final pinnedBooks = await getPinnedWishlistBooks();
+      if (pinnedBooks.length >= 3) {
+        throw Exception('Maximum 3 books can be pinned');
+      }
+    }
+    
+    return await db.update(
+      'wishlist_books',
+      {'isPinned': isPinned ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+  
+  // Delete wishlist book
+  Future<int> deleteWishlistBook(int id) async {
+    final db = await database;
+    return await db.delete(
+      'wishlist_books',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+  
+  // Get wishlist statistics
+  Future<Map<String, dynamic>> getWishlistStatistics() async {
+    final db = await database;
+    
+    final result = await db.rawQuery('''
+      SELECT 
+        COUNT(*) as totalBooks,
+        SUM(price) as totalCost,
+        SUM(CASE WHEN isPinned = 1 THEN price ELSE 0 END) as pinnedCost
+      FROM wishlist_books
+    ''');
+    
+    final stats = result.first;
+    return {
+      'totalBooks': (stats['totalBooks'] as int?) ?? 0,
+      'totalCost': (stats['totalCost'] as double?) ?? 0.0,
+      'pinnedCost': (stats['pinnedCost'] as double?) ?? 0.0,
     };
   }
 }
