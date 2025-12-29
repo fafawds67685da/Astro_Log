@@ -21,7 +21,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 12,
+      version: 13,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -313,6 +313,24 @@ class DatabaseHelper {
         // Column might already exist
       }
     }
+    
+    if (oldVersion < 13) {
+      // Add type and link columns to research_papers
+      try {
+        await db.execute('''
+          ALTER TABLE research_papers ADD COLUMN type TEXT DEFAULT 'Research Paper'
+        ''');
+      } catch (e) {
+        // Column might already exist
+      }
+      try {
+        await db.execute('''
+          ALTER TABLE research_papers ADD COLUMN link TEXT
+        ''');
+      } catch (e) {
+        // Column might already exist
+      }
+    }
   }
 
   Future<void> _createDB(Database db, int version) async {
@@ -379,7 +397,9 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
         author TEXT,
-        imagePath TEXT NOT NULL,
+        imagePath TEXT,
+        type TEXT DEFAULT 'Research Paper',
+        link TEXT,
         status TEXT NOT NULL,
         createdAt TEXT NOT NULL
       )

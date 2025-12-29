@@ -1,8 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import '../services/database_helper.dart';
-import '../widgets/image_card.dart';
 
 class ResearchPapersScreen extends StatefulWidget {
   const ResearchPapersScreen({super.key});
@@ -14,7 +11,6 @@ class ResearchPapersScreen extends StatefulWidget {
 class _ResearchPapersScreenState extends State<ResearchPapersScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final _dbHelper = DatabaseHelper.instance;
-  final _picker = ImagePicker();
 
   @override
   void initState() {
@@ -29,30 +25,45 @@ class _ResearchPapersScreenState extends State<ResearchPapersScreen> with Single
   }
 
   Future<void> _addNewPaper() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-    if (image == null) return;
-
     final titleController = TextEditingController();
     final authorController = TextEditingController();
+    final linkController = TextEditingController();
     String status = 'Pending';
-
-    if (!mounted) return;
+    String type = 'Research Paper';
 
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           backgroundColor: const Color(0xFF1A1A2E),
-          title: const Text('Add Research Paper', style: TextStyle(color: Colors.white)),
+          title: const Text('Add Research Paper / Article', style: TextStyle(color: Colors.white)),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                DropdownButtonFormField<String>(
+                  value: type,
+                  dropdownColor: const Color(0xFF16213E),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'Type',
+                    labelStyle: TextStyle(color: Colors.white70),
+                  ),
+                  items: ['Research Paper', 'Article'].map((t) {
+                    return DropdownMenuItem(value: t, child: Text(t));
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      type = value!;
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
                 TextField(
                   controller: titleController,
                   style: const TextStyle(color: Colors.white),
                   decoration: const InputDecoration(
-                    labelText: 'Paper Title',
+                    labelText: 'Title',
                     labelStyle: TextStyle(color: Colors.white70),
                     enabledBorder: UnderlineInputBorder(
                       borderSide: BorderSide(color: Colors.white30),
@@ -95,6 +106,21 @@ class _ResearchPapersScreenState extends State<ResearchPapersScreen> with Single
                     });
                   },
                 ),
+                if (status == 'Done') const SizedBox(height: 16),
+                if (status == 'Done') TextField(
+                  controller: linkController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'Link (where it is posted)',
+                    labelStyle: TextStyle(color: Colors.white70),
+                    enabledBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: Colors.white30),
+                    ),
+                    focusedBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: Colors.purpleAccent),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -106,11 +132,12 @@ class _ResearchPapersScreenState extends State<ResearchPapersScreen> with Single
             ElevatedButton(
               onPressed: () async {
                 if (titleController.text.isNotEmpty) {
-                  final imagePath = await _dbHelper.saveImage(File(image.path));
                   await _dbHelper.insertResearchPaper({
                     'title': titleController.text,
                     'author': authorController.text,
-                    'imagePath': imagePath,
+                    'type': type,
+                    'link': linkController.text.isEmpty ? null : linkController.text,
+                    'imagePath': '',
                     'status': status,
                     'createdAt': DateTime.now().toIso8601String(),
                   });
@@ -133,9 +160,53 @@ class _ResearchPapersScreenState extends State<ResearchPapersScreen> with Single
     final papers = await _dbHelper.getResearchPapers();
     final paper = papers.firstWhere((p) => p['id'] == id);
     
+    String? link = paper['link'];
+    
+    // If marking as Done, ask for link
+    if (newStatus == 'Done' && (link == null || link.isEmpty)) {
+      final linkController = TextEditingController();
+      final result = await showDialog<String?>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A2E),
+          title: const Text('Add Link', style: TextStyle(color: Colors.white)),
+          content: TextField(
+            controller: linkController,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+              labelText: 'Link (where it is posted)',
+              labelStyle: TextStyle(color: Colors.white70),
+              enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Colors.white30),
+              ),
+              focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Colors.purpleAccent),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: const Text('Skip'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, linkController.text),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      );
+      
+      if (result != null && result.isNotEmpty) {
+        link = result;
+      }
+    }
+    
     await _dbHelper.updateResearchPaper(id, {
       'title': paper['title'],
       'author': paper['author'],
+      'type': paper['type'] ?? 'Research Paper',
+      'link': link,
       'imagePath': paper['imagePath'],
       'status': newStatus,
       'createdAt': paper['createdAt'],
@@ -167,11 +238,6 @@ class _ResearchPapersScreenState extends State<ResearchPapersScreen> with Single
 
     if (confirm == true) {
       await _dbHelper.deleteResearchPaper(id);
-      // Delete image file
-      final file = File(imagePath);
-      if (await file.exists()) {
-        await file.delete();
-      }
       setState(() {});
     }
   }
@@ -181,7 +247,7 @@ class _ResearchPapersScreenState extends State<ResearchPapersScreen> with Single
     return Scaffold(
       backgroundColor: const Color(0xFF0F0E17),
       appBar: AppBar(
-        title: const Text('Research Papers'),
+        title: const Text('Research Papers / Articles'),
         backgroundColor: const Color(0xFF1A1A2E),
         bottom: TabBar(
           controller: _tabController,
@@ -252,19 +318,14 @@ class _PapersGrid extends StatelessWidget {
         }
 
         final papers = snapshot.data!;
-        return GridView.builder(
+        return ListView.builder(
           padding: const EdgeInsets.all(16),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 0.7,
-          ),
           itemCount: papers.length,
           itemBuilder: (context, index) {
             final paper = papers[index];
-            return _PaperCard(
+            return _PaperListTile(
               paper: paper,
+              index: index + 1,
               status: status,
               onChangeStatus: onChangeStatus,
               onDelete: onDelete,
@@ -276,14 +337,16 @@ class _PapersGrid extends StatelessWidget {
   }
 }
 
-class _PaperCard extends StatelessWidget {
+class _PaperListTile extends StatelessWidget {
   final Map<String, dynamic> paper;
+  final int index;
   final String status;
   final Function(int, String, String) onChangeStatus;
   final Function(int, String) onDelete;
 
-  const _PaperCard({
+  const _PaperListTile({
     required this.paper,
+    required this.index,
     required this.status,
     required this.onChangeStatus,
     required this.onDelete,
@@ -291,42 +354,107 @@ class _PaperCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ImageCard(
-      imagePath: paper['imagePath'],
-      title: paper['title'],
-      subtitle: paper['author'],
-      topRightButton: PopupMenuButton<String>(
-        icon: const Icon(Icons.more_vert, color: Colors.white),
-        color: const Color(0xFF16213E),
-        itemBuilder: (context) => [
-          if (status != 'Done')
-            const PopupMenuItem(
-              value: 'done',
-              child: Text('Mark as Done', style: TextStyle(color: Colors.white)),
-            ),
-          if (status != 'Underway')
-            const PopupMenuItem(
-              value: 'underway',
-              child: Text('Mark as Underway', style: TextStyle(color: Colors.white)),
-            ),
-          if (status != 'Pending')
-            const PopupMenuItem(
-              value: 'pending',
-              child: Text('Mark as Pending', style: TextStyle(color: Colors.white)),
-            ),
-          const PopupMenuItem(
-            value: 'delete',
-            child: Text('Delete', style: TextStyle(color: Colors.redAccent)),
+    final type = paper['type'] ?? 'Research Paper';
+    final hasLink = paper['link'] != null && paper['link'].toString().isNotEmpty;
+    
+    return Card(
+      color: const Color(0xFF1A1A2E),
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: Colors.purpleAccent,
+          child: Text(
+            '$index',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
-        ],
-        onSelected: (value) {
-          if (value == 'delete') {
-            onDelete(paper['id'], paper['imagePath']);
-          } else {
-            String newStatus = value == 'done' ? 'Done' : value == 'underway' ? 'Underway' : 'Pending';
-            onChangeStatus(paper['id'], status, newStatus);
-          }
-        },
+        ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                paper['title'],
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: type == 'Article' ? Colors.orange.withOpacity(0.2) : Colors.blue.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: type == 'Article' ? Colors.orange : Colors.blue,
+                  width: 1,
+                ),
+              ),
+              child: Text(
+                type == 'Article' ? 'A' : 'RP',
+                style: TextStyle(
+                  color: type == 'Article' ? Colors.orange : Colors.blue,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (paper['author'] != null && paper['author'].toString().isNotEmpty)
+              Text(
+                paper['author'],
+                style: const TextStyle(color: Colors.white60),
+              ),
+            if (hasLink)
+              Row(
+                children: [
+                  const Icon(Icons.link, size: 14, color: Colors.purpleAccent),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      paper['link'],
+                      style: const TextStyle(color: Colors.purpleAccent, fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+          ],
+        ),
+        trailing: PopupMenuButton<String>(
+          icon: const Icon(Icons.more_vert, color: Colors.white),
+          color: const Color(0xFF16213E),
+          itemBuilder: (context) => [
+            if (status != 'Done')
+              const PopupMenuItem(
+                value: 'done',
+                child: Text('Mark as Done', style: TextStyle(color: Colors.white)),
+              ),
+            if (status != 'Underway')
+              const PopupMenuItem(
+                value: 'underway',
+                child: Text('Mark as Underway', style: TextStyle(color: Colors.white)),
+              ),
+            if (status != 'Pending')
+              const PopupMenuItem(
+                value: 'pending',
+                child: Text('Mark as Pending', style: TextStyle(color: Colors.white)),
+              ),
+            const PopupMenuItem(
+              value: 'delete',
+              child: Text('Delete', style: TextStyle(color: Colors.redAccent)),
+            ),
+          ],
+          onSelected: (value) {
+            if (value == 'delete') {
+              onDelete(paper['id'], paper['imagePath'] ?? '');
+            } else {
+              String newStatus = value == 'done' ? 'Done' : value == 'underway' ? 'Underway' : 'Pending';
+              onChangeStatus(paper['id'], status, newStatus);
+            }
+          },
+        ),
       ),
     );
   }
