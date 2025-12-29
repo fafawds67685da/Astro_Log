@@ -206,23 +206,248 @@ class _CategoryBooksScreenState extends State<CategoryBooksScreen> {
             );
           }
           
-          return GridView.builder(
+          final books = snapshot.data!;
+          
+          return ListView(
             padding: const EdgeInsets.all(16),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              childAspectRatio: 0.65,
-            ),
-            itemCount: snapshot.data!.length,
-            itemBuilder: (context, index) {
-              final book = snapshot.data![index];
-              return _buildBookCard(book, categoryColor, cardIndex: index + 1);
-            },
+            children: [
+              // Cover photo and stats for series
+              if (widget.categoryType == 'series' && widget.categoryId != null)
+                _buildSeriesHeader(books, categoryColor),
+              
+              // Book grid
+              GridView.builder(
+                shrinkWrap: true,
+                physics: NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  childAspectRatio: 0.65,
+                ),
+                itemCount: books.length,
+                itemBuilder: (context, index) {
+                  final book = books[index];
+                  return _buildBookCard(book, categoryColor, cardIndex: index + 1);
+                },
+              ),
+            ],
           );
         },
       ),
     );
+  }
+
+  Widget _buildSeriesHeader(List<Map<String, dynamic>> books, Color accentColor) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _getSeriesData(),
+      builder: (context, seriesSnapshot) {
+        final coverImage = seriesSnapshot.data?['coverImagePath'] as String?;
+        
+        // Calculate statistics
+        final totalBooks = books.length;
+        final readBooks = books.where((b) => b['readingStatus'] == 'read').length;
+        final readingBooks = books.where((b) => b['readingStatus'] == 'reading').length;
+        
+        // Calculate page statistics
+        int totalPages = 0;
+        int readPages = 0;
+        
+        for (var book in books) {
+          final bookTotalPages = book['totalPages'] as int? ?? 0;
+          final bookCurrentPage = book['currentPage'] as int? ?? 0;
+          final status = book['readingStatus'] ?? 'not_read';
+          
+          totalPages += bookTotalPages;
+          
+          if (status == 'read') {
+            readPages += bookTotalPages;
+          } else if (status == 'reading') {
+            readPages += bookCurrentPage;
+          }
+        }
+        
+        final pagePercentage = totalPages > 0 ? (readPages / totalPages * 100).toStringAsFixed(1) : '0.0';
+        
+        return Column(
+          children: [
+            // Cover Photo
+            if (coverImage != null && File(coverImage).existsSync())
+              Container(
+                height: 250,
+                width: double.infinity,
+                margin: EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: accentColor.withOpacity(0.3),
+                      blurRadius: 20,
+                      offset: Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.file(
+                        File(coverImage),
+                        fit: BoxFit.cover,
+                      ),
+                      // Gradient overlay
+                      Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              Colors.black.withOpacity(0.7),
+                            ],
+                            stops: [0.5, 1.0],
+                          ),
+                        ),
+                      ),
+                      // Series name
+                      Positioned(
+                        bottom: 16,
+                        left: 16,
+                        right: 16,
+                        child: Text(
+                          widget.categoryName,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black.withOpacity(0.8),
+                                blurRadius: 10,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            
+            // Statistics Cards
+            Container(
+              margin: EdgeInsets.only(bottom: 20),
+              child: Row(
+                children: [
+                  // Books Read
+                  Expanded(
+                    child: _buildStatCard(
+                      icon: Icons.check_circle,
+                      color: Colors.greenAccent,
+                      title: 'Read',
+                      value: '$readBooks / $totalBooks',
+                      subtitle: 'books',
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  // Currently Reading
+                  Expanded(
+                    child: _buildStatCard(
+                      icon: Icons.auto_stories,
+                      color: Colors.orangeAccent,
+                      title: 'Reading',
+                      value: '$readingBooks',
+                      subtitle: 'books',
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  // Page Progress
+                  Expanded(
+                    child: _buildStatCard(
+                      icon: Icons.book,
+                      color: accentColor,
+                      title: 'Progress',
+                      value: '$pagePercentage%',
+                      subtitle: '$readPages / $totalPages pages',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildStatCard({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String value,
+    required String subtitle,
+  }) {
+    return Container(
+      padding: EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Color(0xFF1A1F3A),
+            Color(0xFF16213E),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: color.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 24),
+          SizedBox(height: 8),
+          Text(
+            title,
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: TextStyle(
+              color: Colors.white54,
+              fontSize: 9,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>> _getSeriesData() async {
+    if (widget.categoryType == 'series' && widget.categoryId != null) {
+      final allSeries = await _db.getBookSeries();
+      return allSeries.firstWhere(
+        (s) => s['id'] == widget.categoryId,
+        orElse: () => <String, dynamic>{},
+      );
+    }
+    return {};
   }
 
   Widget _buildBookCard(Map<String, dynamic> book, Color accentColor, {int? cardIndex}) {
